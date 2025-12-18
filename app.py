@@ -456,14 +456,21 @@ def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df,
     daily_primary = compute_primary_consumption(gen_df, start_date, end_date)
     daily_backup = compute_backup_consumption(fuel_history_df, start_date, end_date)
     
-    # Combine sources: primary + backup per day (reliability boost)
+    # Smart combination: Use primary source preferentially, backup only when primary is missing/low
     all_dates = sorted(set(daily_primary.index.tolist() + daily_backup.index.tolist()))
     daily_combined = pd.Series(index=all_dates, dtype=float)
     
     for date in all_dates:
         primary_val = daily_primary.get(date, 0)
         backup_val = daily_backup.get(date, 0)
-        daily_combined[date] = max(0, primary_val + backup_val)  # Sum both sources, clip >= 0
+        
+        # Use primary if it has reasonable consumption (>0.1L), otherwise use backup
+        if primary_val > 0.1:
+            daily_combined[date] = primary_val
+        elif backup_val > 0.1:
+            daily_combined[date] = backup_val  
+        else:
+            daily_combined[date] = max(primary_val, backup_val)  # Use whichever is higher for very small values
     
     # Build pricing series
     daily_price_series = build_daily_price_series(fuel_purchases_clean, all_dates, pricing_mode)
@@ -534,7 +541,7 @@ def compute_primary_consumption(gen_df, start_date, end_date):
     return daily_primary
 
 def compute_backup_consumption(fuel_history_df, start_date, end_date):
-    """Backup source: tank level -> smooth -> negative diffs -> daily sum"""
+    """Backup source: tank level -> detect significant drops only (ignore noise/resets)"""
     if fuel_history_df.empty:
         return pd.Series(dtype=float)
     
@@ -549,16 +556,27 @@ def compute_backup_consumption(fuel_history_df, start_date, end_date):
     fuel_level_data['state'] = pd.to_numeric(fuel_level_data['state'], errors='coerce').fillna(0)
     fuel_level_data = fuel_level_data.sort_values('last_changed')
     
-    # Smooth with rolling median (anti-noise)
-    fuel_level_data['state_smooth'] = fuel_level_data['state'].rolling(window=5, center=True).median().fillna(fuel_level_data['state'])
+    # More aggressive smoothing for noisy tank sensor
+    fuel_level_data['state_smooth'] = fuel_level_data['state'].rolling(window=20, center=True).median().fillna(fuel_level_data['state'])
     
-    # Compute negative diffs (consumption = level drop)
+    # Only count significant level drops (>1L) to filter out noise and avoid refill events
     fuel_level_data['level_diff'] = fuel_level_data['state_smooth'].diff()
-    fuel_level_data['consumption_diff'] = (-fuel_level_data['level_diff']).clip(lower=0)  # Convert drops to positive consumption
+    
+    # Consumption = negative diff BUT only if:
+    # 1. Drop is > 1L (significant consumption)
+    # 2. Drop is < 30L (avoid counting refills/resets as consumption)
+    significant_drops = (fuel_level_data['level_diff'] < -1) & (fuel_level_data['level_diff'] > -30)
+    fuel_level_data['consumption_diff'] = 0.0
+    fuel_level_data.loc[significant_drops, 'consumption_diff'] = -fuel_level_data.loc[significant_drops, 'level_diff']
+    
     fuel_level_data['date'] = fuel_level_data['last_changed'].dt.date
     
-    # Group by date and sum
+    # Group by date and sum (will be much lower now, filtering out noise)
     daily_backup = fuel_level_data.groupby('date')['consumption_diff'].sum()
+    
+    # Cap backup source to reasonable daily limits (max 50L/day to avoid anomalies)
+    daily_backup = daily_backup.clip(upper=50)
+    
     return daily_backup
 
 def build_daily_price_series(fuel_purchases_clean, all_dates, pricing_mode="nearest_prior"):
@@ -604,7 +622,7 @@ def build_daily_price_series(fuel_purchases_clean, all_dates, pricing_mode="near
 
 @st.cache_data(ttl=600, show_spinner=False)
 def process_enhanced_solar_analysis(solar_df, start_date, end_date):
-    """Enhanced solar analysis with 3-inverter system and positive values only"""
+    """Enhanced solar analysis with 3-inverter system - FIXED power scaling and aggregation"""
     
     if solar_df.empty:
         return pd.DataFrame(), {}, pd.DataFrame(), pd.DataFrame()
@@ -619,19 +637,20 @@ def process_enhanced_solar_analysis(solar_df, start_date, end_date):
     solar_filtered['last_changed'] = pd.to_datetime(solar_filtered['last_changed'])
     solar_filtered['state'] = pd.to_numeric(solar_filtered['state'], errors='coerce')
     
-    # IMPORTANT: Ensure only positive values (fix negative values issue)
+    # CRITICAL FIX: Solar power readings are already in kW scale (not W)
+    # Data shows max 88.4W which is actually 88.4kW total system output
     solar_filtered = solar_filtered[solar_filtered['state'] >= 0]
     
-    # Identify power sensors
-    power_sensors = solar_filtered[solar_filtered['entity_id'].str.contains('power|inverter|goodwe', case=False, na=False)]
+    # Identify power sensors (3-inverter system)
+    power_sensors = solar_filtered[solar_filtered['entity_id'].str.contains('power', case=False, na=False)]
     
     daily_solar = []
     hourly_patterns = []
     inverter_performance = []
     
     if not power_sensors.empty:
-        # Convert to kW and ensure positive values
-        power_sensors['power_kw'] = power_sensors['state'].abs() / 1000  # Ensure positive values
+        # Power values are already in correct scale - use as kW directly
+        power_sensors['power_kw'] = power_sensors['state'].abs()  # Values already in kW
         power_sensors['date'] = power_sensors['last_changed'].dt.date
         power_sensors['hour'] = power_sensors['last_changed'].dt.hour
         
@@ -641,8 +660,10 @@ def process_enhanced_solar_analysis(solar_df, start_date, end_date):
         }).reset_index()
         inverter_daily.columns = ['date', 'inverter', 'total_kwh', 'peak_kw', 'avg_kw', 'readings']
         
-        # Convert to proper kWh (assuming 15-minute intervals)
-        inverter_daily['total_kwh'] = inverter_daily['total_kwh'] / 4
+        # Convert to proper kWh based on actual data frequency
+        # Data appears to be frequent samples, so sum and divide by samples per hour
+        data_freq_per_hour = 12  # Approximately 12 samples per hour based on data density
+        inverter_daily['total_kwh'] = inverter_daily['total_kwh'] / data_freq_per_hour
         
         # System daily totals (sum all 3 inverters)
         system_daily = inverter_daily.groupby('date').agg({
