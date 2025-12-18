@@ -355,22 +355,7 @@ def render_ultra_modern_metric(label, value, delta=None, color="blue", icon="�
     
     desc_html = f'<div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; opacity: 0.8;">{description}</div>' if description else ""
     
-    # Create sparkline if trend data provided
-    sparkline_html = ""
-    if trend_data is not None and len(trend_data) > 1:
-        max_val = max(trend_data)
-        min_val = min(trend_data)
-        if max_val > min_val:
-            normalized = [(val - min_val) / (max_val - min_val) for val in trend_data]
-            points = [f"{i*2},{30-(val*25)}" for i, val in enumerate(normalized)]
-            sparkline_html = f'''
-                <div style="margin-top: 12px;">
-                    <svg width="100" height="30" style="opacity: 0.6;">
-                        <polyline points="{' '.join(points)}" 
-                                  fill="none" stroke="{color_val}" stroke-width="1.5"/>
-                    </svg>
-                </div>
-            '''
+    # Sparklines removed to prevent HTML leakage
     
     with st.container():
         st.markdown(f"""
@@ -407,10 +392,10 @@ def process_fuel_purchases_and_pricing(fuel_purchases_df):
         # Clean column names
         fuel_purchases_df.columns = fuel_purchases_df.columns.str.lower().str.replace(' ', '_').str.replace('[^a-z0-9_]', '', regex=True)
         
-        # Find date and price columns
-        date_cols = [col for col in fuel_purchases_df.columns if 'date' in col]
-        price_cols = [col for col in fuel_purchases_df.columns if 'price' in col or 'cost' in col or 'amount' in col]
-        quantity_cols = [col for col in fuel_purchases_df.columns if 'litre' in col or 'quantity' in col or 'volume' in col]
+        # Find date and price columns (case insensitive)
+        date_cols = [col for col in fuel_purchases_df.columns if 'date' in col.lower()]
+        price_cols = [col for col in fuel_purchases_df.columns if any(x in col.lower() for x in ['price', 'cost'])]
+        quantity_cols = [col for col in fuel_purchases_df.columns if any(x in col.lower() for x in ['liter', 'litre', 'quantity', 'volume', 'amount']) and 'price' not in col.lower()]
         
         if date_cols and price_cols:
             # Process dates
@@ -422,11 +407,25 @@ def process_fuel_purchases_and_pricing(fuel_purchases_df):
                     fuel_purchases_df[col] = pd.to_numeric(fuel_purchases_df[col], errors='coerce')
             
             # Calculate price per liter if not directly available
-            if quantity_cols and len(price_cols) > 0:
-                total_col = price_cols[0]
+            # Try to find price per litre column first (handle typos like 'price per litre itre')
+            price_per_litre_cols = [col for col in fuel_purchases_df.columns if 'price per' in col.lower() and ('litre' in col.lower() or 'liter' in col.lower())]
+            
+            if price_per_litre_cols:
+                # Use existing price per litre column
+                fuel_purchases_df['price_per_litre'] = fuel_purchases_df[price_per_litre_cols[0]]
+            elif quantity_cols and len(price_cols) > 0:
+                # Calculate from cost and quantity
+                cost_cols = [col for col in price_cols if 'cost' in col.lower() or 'rand' in col.lower()]
+                if cost_cols:
+                    total_col = cost_cols[0]
+                else:
+                    total_col = price_cols[0]
                 quantity_col = quantity_cols[0]
                 
                 fuel_purchases_df['price_per_litre'] = fuel_purchases_df[total_col] / fuel_purchases_df[quantity_col]
+            
+            # Clean calculated values
+            if 'price_per_litre' in fuel_purchases_df.columns:
                 fuel_purchases_df['price_per_litre'] = fuel_purchases_df['price_per_litre'].replace([np.inf, -np.inf], np.nan)
             
             # Clean data
@@ -447,99 +446,43 @@ def process_fuel_purchases_and_pricing(fuel_purchases_df):
     return pd.DataFrame(), 22.50
 
 @st.cache_data(ttl=600, show_spinner=False)
-def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df, start_date, end_date):
-    """Enhanced fuel analysis with real pricing and purchase comparison"""
+def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df, start_date, end_date, pricing_mode="nearest_prior"):
+    """Enhanced dual-source fuel analysis with accurate pricing from purchases"""
     
-    if gen_df.empty:
-        return pd.DataFrame(), {}, pd.DataFrame(), pd.DataFrame()
-    
-    # Filter data by date range
-    gen_filtered = filter_data_by_date_range(gen_df, 'last_changed', start_date, end_date)
-    fuel_filtered = filter_data_by_date_range(fuel_history_df, 'last_changed', start_date, end_date)
-    
-    # Process fuel purchases and get real pricing
+    # Process fuel purchases for real pricing
     fuel_purchases_clean, avg_fuel_price = process_fuel_purchases_and_pricing(fuel_purchases_df)
     
-    # Filter fuel purchases by date range
-    if not fuel_purchases_clean.empty:
-        date_col = [col for col in fuel_purchases_clean.columns if 'date' in col][0]
-        fuel_purchases_filtered = filter_data_by_date_range(fuel_purchases_clean, date_col, start_date, end_date)
-    else:
-        fuel_purchases_filtered = pd.DataFrame()
+    # Dual-source consumption computation
+    daily_primary = compute_primary_consumption(gen_df, start_date, end_date)
+    daily_backup = compute_backup_consumption(fuel_history_df, start_date, end_date)
     
-    # Process consumption data
-    gen_filtered['last_changed'] = pd.to_datetime(gen_filtered['last_changed'])
-    gen_filtered['state'] = pd.to_numeric(gen_filtered['state'], errors='coerce')
+    # Combine sources: primary + backup per day (reliability boost)
+    all_dates = sorted(set(daily_primary.index.tolist() + daily_backup.index.tolist()))
+    daily_combined = pd.Series(index=all_dates, dtype=float)
     
-    # Extract sensor data
-    fuel_consumed_data = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_fuel_consumed'].copy()
-    runtime_data = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_runtime_duration'].copy()
-    efficiency_data = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_fuel_efficiency'].copy()
+    for date in all_dates:
+        primary_val = daily_primary.get(date, 0)
+        backup_val = daily_backup.get(date, 0)
+        daily_combined[date] = max(0, primary_val + backup_val)  # Sum both sources, clip >= 0
     
+    # Build pricing series
+    daily_price_series = build_daily_price_series(fuel_purchases_clean, all_dates, pricing_mode)
+    
+    # Compute daily costs
     daily_fuel = []
-    
-    if not fuel_consumed_data.empty:
-        fuel_consumed_data['date'] = fuel_consumed_data['last_changed'].dt.date
-        
-        # Process daily consumption with real pricing
-        for date, day_data in fuel_consumed_data.groupby('date'):
-            if len(day_data) > 0:
-                fuel_reading = day_data['state'].iloc[-1]
-                first_reading = day_data['state'].iloc[0]
-                daily_consumption = max(0, fuel_reading - first_reading) if fuel_reading >= first_reading else fuel_reading
-                
-                # Get price for this date (use closest purchase price or average)
-                date_price = avg_fuel_price
-                if not fuel_purchases_filtered.empty:
-                    date_col = [col for col in fuel_purchases_filtered.columns if 'date' in col][0]
-                    closest_purchase = fuel_purchases_filtered[fuel_purchases_filtered[date_col] <= pd.to_datetime(date)]
-                    if not closest_purchase.empty and 'price_per_litre' in closest_purchase.columns:
-                        date_price = closest_purchase['price_per_litre'].iloc[-1]
-                
-                daily_fuel.append({
-                    'date': pd.to_datetime(date),
-                    'fuel_consumed_liters': daily_consumption,
-                    'fuel_price_per_liter': date_price,
-                    'daily_cost_rands': daily_consumption * date_price,
-                    'cumulative_reading': fuel_reading,
-                    'readings_count': len(day_data)
-                })
-    
-    # Process runtime and efficiency data
-    runtime_summary = []
-    if not runtime_data.empty:
-        runtime_data['date'] = runtime_data['last_changed'].dt.date
-        for date, day_data in runtime_data.groupby('date'):
-            runtime_summary.append({
+    for date in all_dates:
+        if daily_combined[date] > 0:  # Only include days with actual consumption
+            price = daily_price_series.get(date, avg_fuel_price)
+            daily_fuel.append({
                 'date': pd.to_datetime(date),
-                'runtime_hours': day_data['state'].sum(),
-                'avg_runtime': day_data['state'].mean()
+                'fuel_consumed_liters': daily_combined[date],
+                'fuel_price_per_liter': price,
+                'daily_cost_rands': daily_combined[date] * price,
+                'primary_source': daily_primary.get(date, 0),
+                'backup_source': daily_backup.get(date, 0)
             })
     
-    efficiency_summary = []
-    if not efficiency_data.empty:
-        efficiency_data['date'] = efficiency_data['last_changed'].dt.date
-        for date, day_data in efficiency_data.groupby('date'):
-            efficiency_summary.append({
-                'date': pd.to_datetime(date),
-                'efficiency_percent': day_data['state'].mean(),
-                'min_efficiency': day_data['state'].min(),
-                'max_efficiency': day_data['state'].max()
-            })
-    
-    # Combine datasets
     daily_fuel_df = pd.DataFrame(daily_fuel)
-    runtime_df = pd.DataFrame(runtime_summary)
-    efficiency_df = pd.DataFrame(efficiency_summary)
-    
-    if not daily_fuel_df.empty:
-        if not runtime_df.empty:
-            daily_fuel_df = pd.merge(daily_fuel_df, runtime_df, on='date', how='left')
-            daily_fuel_df['fuel_per_hour'] = daily_fuel_df['fuel_consumed_liters'] / daily_fuel_df['runtime_hours']
-            daily_fuel_df['fuel_per_hour'] = daily_fuel_df['fuel_per_hour'].replace([np.inf, -np.inf], 0).fillna(0)
-        
-        if not efficiency_df.empty:
-            daily_fuel_df = pd.merge(daily_fuel_df, efficiency_df, on='date', how='left')
     
     # Calculate statistics
     stats = {}
@@ -549,15 +492,111 @@ def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df,
             'total_cost_rands': daily_fuel_df['daily_cost_rands'].sum(),
             'average_daily_fuel': daily_fuel_df['fuel_consumed_liters'].mean(),
             'average_cost_per_liter': daily_fuel_df['fuel_price_per_liter'].mean(),
-            'total_runtime_hours': daily_fuel_df['runtime_hours'].sum() if 'runtime_hours' in daily_fuel_df.columns else 0,
-            'average_efficiency': daily_fuel_df['efficiency_percent'].mean() if 'efficiency_percent' in daily_fuel_df.columns else 0,
-            'fuel_consumption_trend': daily_fuel_df['fuel_consumed_liters'].tolist()[-7:] if len(daily_fuel_df) >= 7 else [],
-            'cost_trend': daily_fuel_df['daily_cost_rands'].tolist()[-7:] if len(daily_fuel_df) >= 7 else [],
             'period_days': len(daily_fuel_df),
-            'real_pricing_used': True
+            'pricing_mode': pricing_mode,
+            'real_pricing_used': True,
+            'dual_source_reliability': True,
+            'fuel_consumption_trend': daily_fuel_df['fuel_consumed_liters'].tolist()[-7:] if len(daily_fuel_df) >= 7 else [],
+            'cost_trend': daily_fuel_df['daily_cost_rands'].tolist()[-7:] if len(daily_fuel_df) >= 7 else []
         }
     
+    # Filter purchases for selected period
+    fuel_purchases_filtered = pd.DataFrame()
+    if not fuel_purchases_clean.empty:
+        date_col = [col for col in fuel_purchases_clean.columns if 'date' in col][0]
+        fuel_purchases_filtered = filter_data_by_date_range(fuel_purchases_clean, date_col, start_date, end_date)
+    
     return daily_fuel_df, stats, fuel_purchases_filtered, pd.DataFrame()
+
+def compute_primary_consumption(gen_df, start_date, end_date):
+    """Primary source: sensor.generator_fuel_consumed cumulative -> positive diffs -> daily sum"""
+    if gen_df.empty:
+        return pd.Series(dtype=float)
+    
+    # Filter and process
+    gen_filtered = filter_data_by_date_range(gen_df, 'last_changed', start_date, end_date)
+    fuel_consumed_data = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_fuel_consumed'].copy()
+    
+    if fuel_consumed_data.empty:
+        return pd.Series(dtype=float)
+    
+    fuel_consumed_data['last_changed'] = pd.to_datetime(fuel_consumed_data['last_changed'])
+    fuel_consumed_data['state'] = pd.to_numeric(fuel_consumed_data['state'], errors='coerce').fillna(0)
+    fuel_consumed_data = fuel_consumed_data.sort_values('last_changed')
+    
+    # Compute positive diffs (consumption events)
+    fuel_consumed_data['consumption_diff'] = fuel_consumed_data['state'].diff()
+    fuel_consumed_data['consumption_diff'] = fuel_consumed_data['consumption_diff'].clip(lower=0)  # Only positive diffs
+    fuel_consumed_data['date'] = fuel_consumed_data['last_changed'].dt.date
+    
+    # Group by date and sum
+    daily_primary = fuel_consumed_data.groupby('date')['consumption_diff'].sum()
+    return daily_primary
+
+def compute_backup_consumption(fuel_history_df, start_date, end_date):
+    """Backup source: tank level -> smooth -> negative diffs -> daily sum"""
+    if fuel_history_df.empty:
+        return pd.Series(dtype=float)
+    
+    # Filter and process
+    fuel_filtered = filter_data_by_date_range(fuel_history_df, 'last_changed', start_date, end_date)
+    fuel_level_data = fuel_filtered[fuel_filtered['entity_id'] == 'sensor.generator_fuel_level'].copy()
+    
+    if fuel_level_data.empty:
+        return pd.Series(dtype=float)
+    
+    fuel_level_data['last_changed'] = pd.to_datetime(fuel_level_data['last_changed'])
+    fuel_level_data['state'] = pd.to_numeric(fuel_level_data['state'], errors='coerce').fillna(0)
+    fuel_level_data = fuel_level_data.sort_values('last_changed')
+    
+    # Smooth with rolling median (anti-noise)
+    fuel_level_data['state_smooth'] = fuel_level_data['state'].rolling(window=5, center=True).median().fillna(fuel_level_data['state'])
+    
+    # Compute negative diffs (consumption = level drop)
+    fuel_level_data['level_diff'] = fuel_level_data['state_smooth'].diff()
+    fuel_level_data['consumption_diff'] = (-fuel_level_data['level_diff']).clip(lower=0)  # Convert drops to positive consumption
+    fuel_level_data['date'] = fuel_level_data['last_changed'].dt.date
+    
+    # Group by date and sum
+    daily_backup = fuel_level_data.groupby('date')['consumption_diff'].sum()
+    return daily_backup
+
+def build_daily_price_series(fuel_purchases_clean, all_dates, pricing_mode="nearest_prior"):
+    """Build daily price series using nearest-prior or monthly-average pricing"""
+    if fuel_purchases_clean.empty:
+        return {}
+    
+    date_col = [col for col in fuel_purchases_clean.columns if 'date' in col][0]
+    purchases = fuel_purchases_clean.copy()
+    purchases[date_col] = pd.to_datetime(purchases[date_col])
+    purchases = purchases.sort_values(date_col)
+    
+    daily_prices = {}
+    
+    if pricing_mode == "nearest_prior":
+        # Forward-fill from purchase dates
+        for date in all_dates:
+            date_dt = pd.to_datetime(date)
+            prior_purchases = purchases[purchases[date_col] <= date_dt]
+            if not prior_purchases.empty and 'price_per_litre' in prior_purchases.columns:
+                daily_prices[date] = prior_purchases['price_per_litre'].iloc[-1]
+            else:
+                daily_prices[date] = purchases['price_per_litre'].mean() if 'price_per_litre' in purchases.columns else 22.50
+    
+    elif pricing_mode == "monthly_average":
+        # Monthly average price per litre
+        purchases['month'] = purchases[date_col].dt.to_period('M')
+        monthly_avg = purchases.groupby('month')['price_per_litre'].mean()
+        
+        for date in all_dates:
+            date_dt = pd.to_datetime(date)
+            month_period = date_dt.to_period('M')
+            if month_period in monthly_avg.index:
+                daily_prices[date] = monthly_avg[month_period]
+            else:
+                daily_prices[date] = purchases['price_per_litre'].mean() if 'price_per_litre' in purchases.columns else 22.50
+    
+    return daily_prices
 
 # ==============================================================================
 # ENHANCED SOLAR ANALYSIS WITH 3-INVERTER SYSTEM
@@ -1046,15 +1085,21 @@ def main():
             ["Box Select", "Lasso Select", "Pan", "Zoom"],
             help="Choose how to interact with charts"
         )
+        pricing_mode = st.selectbox(
+            "Fuel Pricing Mode",
+            ["nearest_prior", "monthly_average"],
+            index=0,
+            help="Nearest prior: Use closest purchase price per day (recommended). Monthly average: Use monthly mean price."
+        )
         
         st.markdown("---")
         
         # Quick actions with FIXED width
-        if st.button("🔄 Refresh Data", use_container_width=True):
+        if st.button("🔄 Refresh Data", width='stretch'):
             st.cache_data.clear()
             st.rerun()
         
-        if st.button("📧 Email Report", use_container_width=True):
+        if st.button("📧 Email Report", width='stretch'):
             st.success("✅ Report sent to stakeholders")
     
     # Process data with selected date range
@@ -1219,6 +1264,7 @@ def main():
                         monthly = fp.groupby('month').agg({qty_cols[0]: 'sum', **({price_col: 'mean'} if price_col else {})}).reset_index()
                         monthly.rename(columns={qty_cols[0]: 'litres'}, inplace=True)
                         c1m, c2m = st.columns(2)
+                        c1m, c2m, c3m = st.columns(3)
                         with c1m:
                             create_ultra_interactive_chart(
                                 monthly, 'month', 'litres',
@@ -1230,7 +1276,20 @@ def main():
                                     monthly, 'month', price_col,
                                     'Monthly Avg Price per Litre', '#f59e0b', 'line', height=350, enable_zoom=True, selection_mode=selection_mode
                                 )
+                        # Monthly Generator Cost chart
+                        if not daily_fuel.empty:
+                            monthly_cost = daily_fuel.copy()
+                            monthly_cost['month'] = monthly_cost['date'].dt.to_period('M').dt.to_timestamp()
+                            monthly_cost_agg = monthly_cost.groupby('month')['daily_cost_rands'].sum().reset_index()
+                            monthly_cost_agg.rename(columns={'daily_cost_rands': 'monthly_cost_rands'}, inplace=True)
+                            with c3m:
+                                create_ultra_interactive_chart(
+                                    monthly_cost_agg, 'month', 'monthly_cost_rands',
+                                    'Monthly Generator Cost (R)', '#ef4444', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
+                                )
                         st.download_button('Monthly Purchases CSV', monthly.to_csv(index=False).encode('utf-8'), file_name='fuel_purchases_monthly.csv', mime='text/csv', key='dl_monthly_purchases')
+                        if not daily_fuel.empty:
+                            st.download_button('Monthly Generator Cost CSV', monthly_cost_agg.to_csv(index=False).encode('utf-8'), file_name='monthly_generator_cost.csv', mime='text/csv', key='dl_monthly_generator_cost')
         else:
             st.info("📊 No generator data available for selected period")
     
