@@ -430,8 +430,8 @@ def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df,
     # Process fuel purchases for real pricing
     fuel_purchases_clean, avg_fuel_price = process_fuel_purchases_and_pricing(fuel_purchases_df)
     
-    # Dual-source consumption computation
-    daily_primary = compute_primary_consumption(gen_df, start_date, end_date)
+    # Enhanced dual-source consumption computation (detailed CSV + backup)
+    daily_primary = compute_primary_consumption(gen_df, all_data.get('generator_detailed', pd.DataFrame()), start_date, end_date)
     daily_backup = compute_backup_consumption(fuel_history_df, start_date, end_date)
     
     # Smart combination: Use primary source preferentially, backup only when primary is missing/low
@@ -493,12 +493,32 @@ def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df,
     
     return daily_fuel_df, stats, fuel_purchases_filtered, pd.DataFrame()
 
-def compute_primary_consumption(gen_df, start_date, end_date):
-    """Primary source: sensor.generator_fuel_consumed cumulative -> positive diffs -> daily sum"""
+def compute_primary_consumption(gen_df, gen_detailed_df, start_date, end_date):
+    """Enhanced primary source: Use detailed CSV first, fallback to gen.xlsx"""
+    
+    # Try detailed CSV first (higher quality)
+    if not gen_detailed_df.empty:
+        detailed_filtered = filter_data_by_date_range(gen_detailed_df, 'last_changed', start_date, end_date)
+        fuel_data = detailed_filtered[detailed_filtered['entity_id'] == 'sensor.generator_fuel_consumed'].copy()
+        
+        if not fuel_data.empty:
+            fuel_data['last_changed'] = pd.to_datetime(fuel_data['last_changed'])
+            fuel_data['state'] = pd.to_numeric(fuel_data['state'], errors='coerce').fillna(0)
+            fuel_data = fuel_data.sort_values('last_changed')
+            
+            # Compute positive diffs (consumption events)
+            fuel_data['consumption_diff'] = fuel_data['state'].diff()
+            fuel_data['consumption_diff'] = fuel_data['consumption_diff'].clip(lower=0)  # Only positive diffs
+            fuel_data['date'] = fuel_data['last_changed'].dt.date
+            
+            # Group by date and sum
+            return fuel_data.groupby('date')['consumption_diff'].sum()
+    
+    # Fallback to original gen.xlsx if detailed CSV unavailable
     if gen_df.empty:
         return pd.Series(dtype=float)
     
-    # Filter and process
+    # Filter and process original data
     gen_filtered = filter_data_by_date_range(gen_df, 'last_changed', start_date, end_date)
     fuel_consumed_data = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_fuel_consumed'].copy()
     
@@ -515,8 +535,7 @@ def compute_primary_consumption(gen_df, start_date, end_date):
     fuel_consumed_data['date'] = fuel_consumed_data['last_changed'].dt.date
     
     # Group by date and sum
-    daily_primary = fuel_consumed_data.groupby('date')['consumption_diff'].sum()
-    return daily_primary
+    return fuel_consumed_data.groupby('date')['consumption_diff'].sum()
 
 def compute_backup_consumption(fuel_history_df, start_date, end_date):
     """Backup source: tank level -> detect significant drops only (ignore noise/resets)"""
