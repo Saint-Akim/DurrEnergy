@@ -1586,17 +1586,8 @@ def main():
             st.markdown("### 📊 System Comparison Analysis")
             
             try:
-                # Load legacy solar files for comparison
-                from pathlib import Path
-                ROOT = Path(__file__).resolve().parent
-                legacy_files = [
-                    str(ROOT / 'Solar_Goodwe&Fronius-Jan.csv'),
-                    str(ROOT / 'Solar_goodwe&Fronius_April.csv'),
-                    str(ROOT / 'Solar_goodwe&Fronius_may.csv')
-                ]
-                
-                # Analyze legacy system
-                legacy_daily, legacy_stats = analyze_legacy_solar_system(legacy_files)
+                # Analyze legacy system (automatically uses previous_inverter_system.csv)
+                legacy_daily, legacy_stats = analyze_legacy_solar_system()
                 
                 # Analyze new system
                 new_daily, new_stats, new_combined = analyze_new_3inverter_system(all_data['solar'])

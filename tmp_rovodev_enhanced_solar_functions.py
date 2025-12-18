@@ -13,53 +13,87 @@ from datetime import datetime
 # LEGACY vs NEW SYSTEM COMPARISON FUNCTIONS
 # ==============================================================================
 
-def analyze_legacy_solar_system(solar_legacy_files):
+def analyze_legacy_solar_system(solar_legacy_files=None):
     """
     Analyze the old Fronius + Goodwe system
     Returns: DataFrame with daily generation, statistics dict
+    
+    Automatically uses previous_inverter_system.csv if available
     """
+    from pathlib import Path
     
-    legacy_data = []
+    # Try to load previous_inverter_system.csv first (preferred)
+    ROOT = Path(__file__).resolve().parent
+    prev_system_file = ROOT / 'previous_inverter_system.csv'
     
-    for file_path in solar_legacy_files:
+    if prev_system_file.exists():
         try:
-            df = pd.read_csv(file_path)
-            df['source_file'] = file_path
-            legacy_data.append(df)
+            df_legacy = pd.read_csv(prev_system_file)
         except Exception as e:
-            print(f"Error loading {file_path}: {e}")
-            continue
-    
-    if not legacy_data:
+            print(f"Error loading previous_inverter_system.csv: {e}")
+            return pd.DataFrame(), {}
+    elif solar_legacy_files:
+        # Fallback to provided files
+        legacy_data = []
+        for file_path in solar_legacy_files:
+            try:
+                df = pd.read_csv(file_path)
+                df['source_file'] = file_path
+                legacy_data.append(df)
+            except Exception as e:
+                print(f"Error loading {file_path}: {e}")
+                continue
+        
+        if not legacy_data:
+            return pd.DataFrame(), {}
+        
+        df_legacy = pd.concat(legacy_data, ignore_index=True)
+    else:
         return pd.DataFrame(), {}
-    
-    df_legacy = pd.concat(legacy_data, ignore_index=True)
     df_legacy['last_changed'] = pd.to_datetime(df_legacy['last_changed'])
     df_legacy['state'] = pd.to_numeric(df_legacy['state'], errors='coerce')
     df_legacy['date'] = df_legacy['last_changed'].dt.date
     
-    # Find grid power sensors (total system output)
-    fronius_grid = df_legacy[df_legacy['entity_id'] == 'sensor.fronius_grid_power'].copy()
-    goodwe_grid = df_legacy[df_legacy['entity_id'] == 'sensor.goodwe_grid_power'].copy()
+    # Check if this is previous_inverter_system.csv (hourly data) or legacy CSV files
+    has_fronius = 'sensor.total_fronius_pv_power' in df_legacy['entity_id'].values
+    has_goodwe_total = 'sensor.goodwe_total_pv_power' in df_legacy['entity_id'].values
     
-    # Convert to kW (negative values = generation)
-    fronius_grid['power_kw'] = fronius_grid['state'].abs() / 1000
-    goodwe_grid['power_kw'] = goodwe_grid['state'].abs() / 1000
+    if has_fronius and has_goodwe_total:
+        # This is previous_inverter_system.csv - HOURLY AGGREGATED DATA
+        # State values are already in kWh (hourly average), just sum them
+        fronius_df = df_legacy[df_legacy['entity_id'] == 'sensor.total_fronius_pv_power'].copy()
+        goodwe_df = df_legacy[df_legacy['entity_id'] == 'sensor.goodwe_total_pv_power'].copy()
+        
+        # Daily aggregation - simply sum the hourly values
+        fronius_daily = fronius_df.groupby('date')['state'].sum()
+        goodwe_daily = goodwe_df.groupby('date')['state'].sum()
+    else:
+        # Legacy CSV files - need time integration
+        fronius_grid = df_legacy[df_legacy['entity_id'] == 'sensor.fronius_grid_power'].copy()
+        goodwe_grid = df_legacy[df_legacy['entity_id'] == 'sensor.goodwe_grid_power'].copy()
+        
+        # Convert to kW (negative values = generation)
+        fronius_grid['power_kw'] = fronius_grid['state'].abs() / 1000
+        goodwe_grid['power_kw'] = goodwe_grid['state'].abs() / 1000
+        
+        # Calculate energy using time integration
+        def calc_energy(df):
+            df = df.sort_values('last_changed').copy()
+            df['time_diff_hours'] = df['last_changed'].diff().dt.total_seconds() / 3600
+            df['time_diff_hours'] = df['time_diff_hours'].fillna(0).clip(upper=1.0)
+            df['energy_kwh'] = df['power_kw'] * df['time_diff_hours']
+            return df
+        
+        fronius_grid = calc_energy(fronius_grid)
+        goodwe_grid = calc_energy(goodwe_grid)
+        
+        # Daily aggregation
+        fronius_daily = fronius_grid.groupby('date')['energy_kwh'].sum()
+        goodwe_daily = goodwe_grid.groupby('date')['energy_kwh'].sum()
     
-    # Calculate energy using time integration
-    def calc_energy(df):
-        df = df.sort_values('last_changed').copy()
-        df['time_diff_hours'] = df['last_changed'].diff().dt.total_seconds() / 3600
-        df['time_diff_hours'] = df['time_diff_hours'].fillna(0).clip(upper=1.0)
-        df['energy_kwh'] = df['power_kw'] * df['time_diff_hours']
-        return df
-    
-    fronius_grid = calc_energy(fronius_grid)
-    goodwe_grid = calc_energy(goodwe_grid)
-    
-    # Daily aggregation
-    fronius_daily = fronius_grid.groupby('date')['energy_kwh'].sum()
-    goodwe_daily = goodwe_grid.groupby('date')['energy_kwh'].sum()
+    # Check if we have valid data
+    if len(fronius_daily) == 0 and len(goodwe_daily) == 0:
+        return pd.DataFrame(), {}
     
     # Combine for overlapping days
     all_dates = sorted(set(fronius_daily.index) | set(goodwe_daily.index))
@@ -72,15 +106,21 @@ def analyze_legacy_solar_system(solar_legacy_files):
     combined_daily['date'] = pd.to_datetime(combined_daily['date'])
     
     # Statistics
+    # Calculate peak power from the original dataframe
+    fronius_peak = df_legacy[df_legacy['entity_id'].str.contains('fronius', case=False, na=False)]['state'].max()
+    goodwe_peak = df_legacy[df_legacy['entity_id'].str.contains('goodwe', case=False, na=False)]['state'].max()
+    
+    # For hourly data, values are already in correct units
+    # For legacy files with grid_power, they would have been converted
+    peak_system_kw = max(fronius_peak if not pd.isna(fronius_peak) else 0,
+                        goodwe_peak if not pd.isna(goodwe_peak) else 0)
+    
     stats = {
         'system_type': 'Legacy (Fronius + Goodwe)',
         'total_kwh': combined_daily['total_kwh'].sum(),
         'avg_daily_kwh': combined_daily['total_kwh'].mean(),
         'best_day_kwh': combined_daily['total_kwh'].max(),
-        'peak_system_kw': max(
-            fronius_grid['power_kw'].max() if len(fronius_grid) > 0 else 0,
-            goodwe_grid['power_kw'].max() if len(goodwe_grid) > 0 else 0
-        ),
+        'peak_system_kw': peak_system_kw,
         'fronius_contribution_pct': (combined_daily['fronius_kwh'].sum() / combined_daily['total_kwh'].sum() * 100) if combined_daily['total_kwh'].sum() > 0 else 0,
         'goodwe_contribution_pct': (combined_daily['goodwe_kwh'].sum() / combined_daily['total_kwh'].sum() * 100) if combined_daily['total_kwh'].sum() > 0 else 0,
         'days_active': len(combined_daily),
