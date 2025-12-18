@@ -23,6 +23,17 @@ from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import enhanced solar analysis functions
+from tmp_rovodev_enhanced_solar_functions import (
+    analyze_legacy_solar_system,
+    analyze_new_3inverter_system,
+    compare_solar_systems,
+    calculate_hourly_generation_pattern,
+    identify_underperforming_inverter,
+    calculate_generation_trends,
+    calculate_financial_metrics
+)
+
 # ==============================================================================
 # ULTRA-MODERN PAGE CONFIGURATION
 # ==============================================================================
@@ -1564,6 +1575,218 @@ def main():
                         height=350, enable_zoom=True, selection_mode=selection_mode
                     )
         else:
+
+            
+            # ===================================================================
+            # ENHANCED SOLAR ANALYSIS - NEW SECTIONS
+            # ===================================================================
+            
+            # System Comparison Analysis (Legacy vs New)
+            st.markdown("---")
+            st.markdown("### 📊 System Comparison Analysis")
+            
+            try:
+                # Load legacy solar files for comparison
+                from pathlib import Path
+                ROOT = Path(__file__).resolve().parent
+                legacy_files = [
+                    str(ROOT / 'Solar_Goodwe&Fronius-Jan.csv'),
+                    str(ROOT / 'Solar_goodwe&Fronius_April.csv'),
+                    str(ROOT / 'Solar_goodwe&Fronius_may.csv')
+                ]
+                
+                # Analyze legacy system
+                legacy_daily, legacy_stats = analyze_legacy_solar_system(legacy_files)
+                
+                # Analyze new system
+                new_daily, new_stats, new_combined = analyze_new_3inverter_system(all_data['solar'])
+                
+                # Compare systems
+                if legacy_stats and new_stats:
+                    comparison = compare_solar_systems(legacy_stats, new_stats)
+                    
+                    st.markdown("#### Legacy (Fronius + Goodwe) vs New (3x Goodwe)")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        render_clean_metric(
+                            "Peak Capacity",
+                            f"{comparison['new_peak_kw']:.1f} kW",
+                            f"↗️ +{comparison['peak_capacity_improvement_pct']:.1f}% vs legacy",
+                            "green", "⚡",
+                            f"Legacy: {comparison['legacy_peak_kw']:.1f} kW"
+                        )
+                    
+                    with col2:
+                        render_clean_metric(
+                            "Daily Generation",
+                            f"{comparison['new_avg_daily']:.1f} kWh/day",
+                            f"↗️ +{comparison['daily_generation_improvement_pct']:.1f}% vs legacy",
+                            "green", "☀️",
+                            f"Legacy: {comparison['legacy_avg_daily']:.1f} kWh/day"
+                        )
+                    
+                    with col3:
+                        render_clean_metric(
+                            "System Upgrade",
+                            "Complete ✅",
+                            comparison['system_upgrade'],
+                            "cyan", "🔧",
+                            comparison['recommendation']
+                        )
+                    
+                    # Show comparison note
+                    st.info(f"ℹ️ **Note:** {comparison['seasonal_note']}")
+                    
+            except Exception as e:
+                st.warning(f"System comparison not available: {str(e)}")
+            
+            # Hourly Generation Patterns
+            st.markdown("---")
+            st.markdown("### 🕐 Hourly Generation Patterns")
+            
+            if not all_data['solar'].empty:
+                try:
+                    hourly_pattern = calculate_hourly_generation_pattern(all_data['solar'])
+                    
+                    if not hourly_pattern.empty:
+                        # Create hourly pattern chart
+                        fig_hourly = go.Figure()
+                        
+                        fig_hourly.add_trace(go.Bar(
+                            x=hourly_pattern['hour'],
+                            y=hourly_pattern['avg_power_kw'],
+                            name='Average Power',
+                            marker=dict(
+                                color=['#10b981' if is_peak else '#3b82f6' 
+                                       for is_peak in hourly_pattern['is_peak']],
+                                opacity=0.8
+                            ),
+                            hovertemplate="<b>%{x}:00</b><br>Avg: %{y:.1f} kW<extra></extra>"
+                        ))
+                        
+                        fig_hourly.update_layout(
+                            title="Average Generation by Hour of Day",
+                            xaxis_title="Hour of Day",
+                            yaxis_title="Average Power (kW)",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#e2e8f0'),
+                            height=400,
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig_hourly, use_container_width=True, key="hourly_pattern_chart")
+                        
+                        # Peak hours info
+                        peak_hours = hourly_pattern[hourly_pattern['is_peak']]['hour'].tolist()
+                        if peak_hours:
+                            st.success(f"🌟 Peak Generation Hours: {', '.join([f'{h:02d}:00' for h in peak_hours])}")
+                    
+                except Exception as e:
+                    st.warning(f"Hourly pattern analysis not available: {str(e)}")
+            
+            # Inverter Performance Monitoring
+            st.markdown("---")
+            st.markdown("### 🔌 Inverter Performance Monitoring")
+            
+            if not inverter_performance.empty:
+                try:
+                    alert = identify_underperforming_inverter(inverter_performance)
+                    
+                    if alert and alert.get('has_issue'):
+                        severity_color = {
+                            'HIGH': '🔴',
+                            'MEDIUM': '🟡',
+                            'LOW': '🟢'
+                        }
+                        
+                        st.warning(f"""
+                        {severity_color.get(alert['severity'], '⚠️')} **Performance Alert - {alert['severity']} Priority**
+                        
+                        - **Underperforming Inverter:** {alert['worst_inverter']}
+                        - **Capacity Factor:** {alert['worst_capacity_factor']:.1f}% (vs {alert['best_capacity_factor']:.1f}% best)
+                        - **Performance Gap:** {alert['performance_gap_pct']:.1f}%
+                        - **Recommendation:** {alert['recommendation']}
+                        """)
+                    else:
+                        st.success("✅ All inverters performing within acceptable range")
+                    
+                    # Show capacity factors for all inverters
+                    col1, col2, col3 = st.columns(3)
+                    inverter_names = inverter_performance['inverter'].unique()
+                    
+                    for idx, inv in enumerate(inverter_names[:3]):
+                        inv_data = inverter_performance[inverter_performance['inverter'] == inv]
+                        cf = (inv_data['avg_kw'].mean() / inv_data['peak_kw'].max() * 100) if inv_data['peak_kw'].max() > 0 else 0
+                        
+                        with [col1, col2, col3][idx]:
+                            render_clean_metric(
+                                f"Inverter {idx + 1}",
+                                f"{cf:.1f}%",
+                                "Capacity Factor",
+                                "green" if cf > 35 else "yellow", "⚡",
+                                inv.replace('sensor.', '').replace('_active_power', '')
+                            )
+                
+                except Exception as e:
+                    st.warning(f"Inverter monitoring not available: {str(e)}")
+            
+            # Generation Trends
+            st.markdown("---")
+            st.markdown("### 📈 Generation Trends & Forecasting")
+            
+            if not daily_solar.empty and len(daily_solar) >= 7:
+                try:
+                    trends = calculate_generation_trends(daily_solar, window=7)
+                    
+                    if not trends.empty:
+                        # Create trend chart
+                        fig_trend = go.Figure()
+                        
+                        fig_trend.add_trace(go.Scatter(
+                            x=trends['date'],
+                            y=trends['total_kwh'],
+                            mode='lines+markers',
+                            name='Daily Generation',
+                            line=dict(color='#3b82f6', width=2),
+                            marker=dict(size=6)
+                        ))
+                        
+                        fig_trend.add_trace(go.Scatter(
+                            x=trends['date'],
+                            y=trends['rolling_avg'],
+                            mode='lines',
+                            name='7-Day Average',
+                            line=dict(color='#10b981', width=3, dash='dash')
+                        ))
+                        
+                        fig_trend.update_layout(
+                            title="Generation Trends (7-Day Rolling Average)",
+                            xaxis_title="Date",
+                            yaxis_title="Generation (kWh)",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#e2e8f0'),
+                            height=400,
+                            hovermode='x unified'
+                        )
+                        
+                        st.plotly_chart(fig_trend, use_container_width=True, key="trend_chart")
+                        
+                        # Show trend direction
+                        latest_trend = trends['trend_direction'].iloc[-1] if len(trends) > 0 else 'STABLE'
+                        trend_icons = {
+                            'INCREASING': '📈 Generation is increasing',
+                            'DECREASING': '📉 Generation is decreasing',
+                            'STABLE': '➡️ Generation is stable'
+                        }
+                        st.info(trend_icons.get(latest_trend, 'Trend analysis'))
+                
+                except Exception as e:
+                    st.warning(f"Trend analysis not available: {str(e)}")
+            
             st.info("📊 No solar data available for selected period")
     
     # Data Health panel and summary downloads in System Overview tab
