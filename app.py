@@ -888,7 +888,6 @@ def create_ultra_interactive_chart(df, x_col, y_col, title, color="#3b82f6", cha
         hoverlabel=dict(
             bgcolor="rgba(15, 23, 42, 0.95)",
             bordercolor="rgba(148, 163, 184, 0.3)",
-            borderwidth=1,
             font=dict(color="#f1f5f9", family="Inter", size=12)
         )
     )
