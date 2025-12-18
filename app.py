@@ -338,45 +338,23 @@ def load_all_energy_data_silent():
 # ENHANCED METRIC DISPLAY
 # ==============================================================================
 
-def render_ultra_modern_metric(label, value, delta=None, color="blue", icon="📊", description=None, trend_data=None):
-    """Ultra-modern metric cards with embedded sparklines"""
-    colors = {
-        "blue": "#3b82f6", "green": "#10b981", "red": "#ef4444", 
-        "yellow": "#f59e0b", "purple": "#8b5cf6", "cyan": "#06b6d4"
-    }
-    color_val = colors.get(color, colors["blue"])
+def render_clean_metric(label, value, delta=None, color="blue", icon="📊", description=None):
+    """Clean metric using native Streamlit components"""
     
-    delta_html = f'''
-        <div style="color: {color_val}; font-size: 0.9rem; margin-top: 8px; font-weight: 700; 
-                    display: flex; align-items: center; gap: 8px;">
-            {delta}
-        </div>
-    ''' if delta else ""
-    
-    desc_html = f'<div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; opacity: 0.8;">{description}</div>' if description else ""
-    
-    # Sparklines removed to prevent HTML leakage
-    
+    # Use native Streamlit components
     with st.container():
-        st.markdown(f"""
-            <div class="metric-card-modern animate-fade-in">
-                <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 20px;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
-                            <span style="font-size: 2.2rem; margin-right: 16px; opacity: 0.9;">{icon}</span>
-                            <div>
-                                <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 800; 
-                                             text-transform: uppercase; letter-spacing: 2px; display: block;">{label}</span>
-                                {desc_html}
-                            </div>
-                        </div>
-                        <div style="font-size: 2.8rem; font-weight: 900; color: var(--text-primary); 
-                                   margin-bottom: 8px; letter-spacing: -0.03em; line-height: 1;">{value}</div>
-                        {delta_html}
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+        col1, col2 = st.columns([1, 4])
+        
+        with col1:
+            st.markdown(f"<div style='font-size: 2.5rem; text-align: center;'>{icon}</div>", unsafe_allow_html=True)
+        
+        with col2:
+            st.metric(
+                label=label,
+                value=value,
+                delta=delta,
+                help=description
+            )
 
 # ==============================================================================
 # ENHANCED FUEL ANALYSIS WITH REAL PRICING
@@ -996,25 +974,20 @@ def main():
     """Ultra-modern improved main application"""
     
     # Ultra-modern header (FIXED TITLE)
-    st.markdown("""
-        <div class="section-header-modern animate-fade-in">
-            <h1 class="gradient-text">🏭 Durr Bottling Energy</h1>
-            <p style="margin: 12px 0 0 0; font-size: 1.3rem; color: var(--text-muted); font-weight: 500;">
-                Ultra-Modern Interactive Energy Monitoring Platform with Real-Time Pricing & 3-Inverter System
-            </p>
-            <div style="margin-top: 16px; display: flex; gap: 16px; align-items: center;">
-                <span style="background: var(--bg-glass); padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; border: 1px solid var(--border);">
-                    🎯 Version 10.0 Enhanced
-                </span>
-                <span style="background: var(--bg-glass); padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; border: 1px solid var(--border);">
-                    💰 Real Fuel Pricing
-                </span>
-                <span style="background: var(--bg-glass); padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; border: 1px solid var(--border);">
-                    ☀️ 3-Inverter System
-                </span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    # Clean header with native Streamlit
+    st.title("🏭 Durr Bottling Energy Intelligence")
+    st.markdown("**Ultra-Modern Interactive Energy Monitoring Platform with Real-Time Pricing & 3-Inverter System**")
+    
+    # Feature badges using clean columns
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.info("🎯 Version 10.0 Enhanced")
+    with col2:
+        st.error("💰 Real Fuel Pricing") 
+    with col3:
+        st.success("☀️ 3-Inverter System")
+    with col4:
+        st.warning("📅 Interactive Date Range")
     
     # Silent data loading
     all_data = load_all_energy_data_silent()
@@ -1149,8 +1122,8 @@ def main():
     
     # Generator Analysis Tab (ENHANCED WITH REAL PRICING)
     with tab1:
-        st.markdown("## 🔋 Enhanced Generator Fuel Analysis")
-        st.markdown("### Real-time fuel consumption monitoring with actual market pricing")
+        st.header("🔋 Generator Fuel Analysis")
+        st.markdown("**Real-time fuel consumption monitoring with actual market pricing**")
         
         if not daily_fuel.empty and fuel_stats:
             # Enhanced metrics with real pricing info
@@ -1316,8 +1289,8 @@ def main():
     
     # Solar Performance Tab (ENHANCED WITH 3-INVERTER SYSTEM)
     with tab2:
-        st.markdown("## ☀️ Enhanced Solar Performance")
-        st.markdown("### 3-Inverter system monitoring with upgraded capacity analysis")
+        st.header("☀️ Solar Performance")
+        st.markdown("**3-Inverter system monitoring with capacity analysis**")
         
         if not daily_solar.empty and solar_stats:
             # Enhanced solar metrics
