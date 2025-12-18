@@ -372,26 +372,27 @@ def render_ultra_modern_metric(label, value, delta=None, color="blue", icon="�
                 </div>
             '''
     
-    st.markdown(f"""
-        <div class="metric-card-modern animate-fade-in">
-            <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 20px;">
-                <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; margin-bottom: 12px;">
-                        <span style="font-size: 2.2rem; margin-right: 16px; opacity: 0.9;">{icon}</span>
-                        <div>
-                            <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 800; 
-                                         text-transform: uppercase; letter-spacing: 2px; display: block;">{label}</span>
-                            {desc_html}
+    with st.container():
+        st.markdown(f"""
+            <div class="metric-card-modern animate-fade-in">
+                <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <span style="font-size: 2.2rem; margin-right: 16px; opacity: 0.9;">{icon}</span>
+                            <div>
+                                <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 800; 
+                                             text-transform: uppercase; letter-spacing: 2px; display: block;">{label}</span>
+                                {desc_html}
+                            </div>
                         </div>
+                        <div style="font-size: 2.8rem; font-weight: 900; color: var(--text-primary); 
+                                   margin-bottom: 8px; letter-spacing: -0.03em; line-height: 1;">{value}</div>
+                        {delta_html}
                     </div>
-                    <div style="font-size: 2.8rem; font-weight: 900; color: var(--text-primary); 
-                               margin-bottom: 8px; letter-spacing: -0.03em; line-height: 1;">{value}</div>
-                    {delta_html}
+                    {sparkline_html}
                 </div>
-                {sparkline_html}
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 # ==============================================================================
 # ENHANCED FUEL ANALYSIS WITH REAL PRICING
@@ -770,7 +771,7 @@ def create_date_range_selector(key_prefix="global"):
 # ==============================================================================
 
 def create_ultra_interactive_chart(df, x_col, y_col, title, color="#3b82f6", chart_type="bar", 
-                                 height=500, enable_zoom=True, enable_selection=True):
+                                 height=500, enable_zoom=True, enable_selection=True, selection_mode="select"):
     """Ultra-interactive charts with advanced zoom, pan, and selection capabilities"""
     
     if df.empty or x_col not in df.columns or y_col not in df.columns:
@@ -910,13 +911,21 @@ def create_ultra_interactive_chart(df, x_col, y_col, title, color="#3b82f6", cha
     
     # Enable selection if requested
     if enable_selection:
-        # Enable selection; omit selectdirection to maintain compatibility across Plotly versions
-        fig.update_layout(
-            dragmode='select'
-        )
+        mode_map = {
+            "Box Select": "select",
+            "Lasso Select": "lasso",
+            "Pan": "pan",
+            "Zoom": "zoom",
+            "select": "select",
+            "lasso": "lasso",
+            "pan": "pan",
+            "zoom": "zoom",
+        }
+        dm = mode_map.get(selection_mode, "select")
+        fig.update_layout(dragmode=dm)
     
     # Display chart with FIXED width parameter
-    chart = st.plotly_chart(fig, use_container_width=True, config=config, key=f"chart_{title.replace(' ', '_')}")
+    chart = st.plotly_chart(fig, width='stretch', config=config, key=f"chart_{title.replace(' ', '_')}")
     
     return fig, df_clean
 
@@ -1033,6 +1042,11 @@ def main():
         
         enable_animations = st.checkbox("Enable Animations", value=True, help="Smooth chart transitions")
         show_sparklines = st.checkbox("Show Trend Sparklines", value=True, help="Mini charts in metrics")
+        selection_mode = st.selectbox(
+            "Selection Mode",
+            ["Box Select", "Lasso Select", "Pan", "Zoom"],
+            help="Choose how to interact with charts"
+        )
         
         st.markdown("---")
         
@@ -1120,11 +1134,11 @@ def main():
             with st.expander("⬇️ Download datasets", expanded=False):
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.download_button("Daily Fuel CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="daily_fuel.csv", mime="text/csv")
+                    st.download_button("Daily Fuel CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="daily_fuel.csv", mime="text/csv", key="dl_daily_fuel_top")
                 with c2:
-                    st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", disabled=fuel_purchases.empty)
+                    st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_top", disabled=fuel_purchases.empty)
                 with c3:
-                    st.download_button("Runtime/Efficiency CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="fuel_runtime_efficiency.csv", mime="text/csv")
+                    st.download_button("Runtime/Efficiency CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="fuel_runtime_efficiency.csv", mime="text/csv", key="dl_runtime_efficiency_top")
 
             # Enhanced fuel analysis charts
             st.markdown("### 📊 Enhanced Fuel Consumption Analysis")
@@ -1135,19 +1149,19 @@ def main():
                 fig1, df1 = create_ultra_interactive_chart(
                     daily_fuel, 'date', 'fuel_consumed_liters',
                     'Daily Fuel Consumption (Enhanced)', '#3b82f6', 'bar',
-                    height=400, enable_zoom=True, enable_selection=True
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
                 )
                 if df1 is not None:
-                    st.download_button("⬇️ Download Chart Data (Fuel Consumption)", df1.to_csv(index=False).encode('utf-8'), file_name="fuel_consumption_chart.csv", mime="text/csv")
+                    st.download_button("⬇️ Download Chart Data (Fuel Consumption)", df1.to_csv(index=False).encode('utf-8'), file_name="fuel_consumption_chart.csv", mime="text/csv", key="dl_chart_fuel_consumption")
             
             with col2:
                 fig2, df2 = create_ultra_interactive_chart(
                     daily_fuel, 'date', 'daily_cost_rands',
                     'Daily Fuel Cost (Real Pricing)', '#ef4444', 'area',
-                    height=400, enable_zoom=True, enable_selection=True
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
                 )
                 if df2 is not None:
-                    st.download_button("⬇️ Download Chart Data (Fuel Cost)", df2.to_csv(index=False).encode('utf-8'), file_name="fuel_cost_chart.csv", mime="text/csv")
+                    st.download_button("⬇️ Download Chart Data (Fuel Cost)", df2.to_csv(index=False).encode('utf-8'), file_name="fuel_cost_chart.csv", mime="text/csv", key="dl_chart_fuel_cost")
             
             # Fuel purchase tracking comparison
             if not fuel_purchases.empty:
@@ -1193,17 +1207,31 @@ def main():
                         "Surplus" if balance > 0 else "Deficit"
                     )
                 
-                # Purchase tracking chart
+                # Purchase tracking charts (monthly aggregation)
                 if 'date' in fuel_purchases.columns:
                     date_col = [col for col in fuel_purchases.columns if 'date' in col][0]
-                    quantity_col = [col for col in fuel_purchases.columns if 'litre' in col or 'quantity' in col]
-                    
-                    if quantity_col:
-                        create_ultra_interactive_chart(
-                            fuel_purchases, date_col, quantity_col[0],
-                            'Fuel Purchases Over Time', '#10b981', 'bar',
-                            height=350, enable_zoom=True
-                        )
+                    qty_cols = [col for col in fuel_purchases.columns if 'litre' in col or 'quantity' in col]
+                    price_col = 'price_per_litre' if 'price_per_litre' in fuel_purchases.columns else None
+                    if qty_cols:
+                        fp = fuel_purchases.copy()
+                        fp[date_col] = pd.to_datetime(fp[date_col], errors='coerce')
+                        fp = fp.dropna(subset=[date_col])
+                        fp['month'] = fp[date_col].dt.to_period('M').dt.to_timestamp()
+                        monthly = fp.groupby('month').agg({qty_cols[0]: 'sum', **({price_col: 'mean'} if price_col else {})}).reset_index()
+                        monthly.rename(columns={qty_cols[0]: 'litres'}, inplace=True)
+                        c1m, c2m = st.columns(2)
+                        with c1m:
+                            create_ultra_interactive_chart(
+                                monthly, 'month', 'litres',
+                                'Monthly Fuel Purchased (L)', '#10b981', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
+                            )
+                        if price_col:
+                            with c2m:
+                                create_ultra_interactive_chart(
+                                    monthly, 'month', price_col,
+                                    'Monthly Avg Price per Litre', '#f59e0b', 'line', height=350, enable_zoom=True, selection_mode=selection_mode
+                                )
+                        st.download_button('Monthly Purchases CSV', monthly.to_csv(index=False).encode('utf-8'), file_name='fuel_purchases_monthly.csv', mime='text/csv', key='dl_monthly_purchases')
         else:
             st.info("📊 No generator data available for selected period")
     
@@ -1266,19 +1294,19 @@ def main():
                 fig3, df3 = create_ultra_interactive_chart(
                     daily_solar, 'date', 'total_kwh',
                     'Daily Solar Generation (3-Inverter System)', '#10b981', 'area',
-                    height=400, enable_zoom=True, enable_selection=True
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
                 )
                 if df3 is not None:
-                    st.download_button("⬇️ Download Chart Data (Solar Daily)", df3.to_csv(index=False).encode('utf-8'), file_name="solar_daily_chart.csv", mime="text/csv")
+                    st.download_button("⬇️ Download Chart Data (Solar Daily)", df3.to_csv(index=False).encode('utf-8'), file_name="solar_daily_chart.csv", mime="text/csv", key="dl_chart_solar_daily")
             
             with col2:
                 fig4, df4 = create_ultra_interactive_chart(
                     daily_solar, 'date', 'peak_kw',
                     'Daily Peak Power Output', '#f59e0b', 'line',
-                    height=400, enable_zoom=True, enable_selection=True
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
                 )
                 if df4 is not None:
-                    st.download_button("⬇️ Download Chart Data (Peak Power)", df4.to_csv(index=False).encode('utf-8'), file_name="peak_power_chart.csv", mime="text/csv")
+                    st.download_button("⬇️ Download Chart Data (Peak Power)", df4.to_csv(index=False).encode('utf-8'), file_name="peak_power_chart.csv", mime="text/csv", key="dl_chart_peak_power")
             
             # System improvement analysis
             if solar_stats.get('system_type') == '3-Inverter Enhanced System':
@@ -1340,7 +1368,7 @@ def main():
                     create_ultra_interactive_chart(
                         inverter_totals, 'inverter', 'total_kwh',
                         'Individual Inverter Performance Comparison', '#8b5cf6', 'bar',
-                        height=350, enable_zoom=True
+                        height=350, enable_zoom=True, selection_mode=selection_mode
                     )
         else:
             st.info("📊 No solar data available for selected period")
@@ -1379,13 +1407,13 @@ def main():
         with st.expander("⬇️ Export all analytics as CSVs", expanded=False):
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.download_button("Generator Daily CSV", daily_fuel.to_csv(index=False).encode('utf-8') if not daily_fuel.empty else b"", file_name="generator_daily.csv", mime="text/csv", disabled=daily_fuel.empty)
-                st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", disabled=fuel_purchases.empty)
+                st.download_button("Generator Daily CSV", daily_fuel.to_csv(index=False).encode('utf-8') if not daily_fuel.empty else b"", file_name="generator_daily.csv", mime="text/csv", key="dl_generator_daily_bottom", disabled=daily_fuel.empty)
+                st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_bottom", disabled=fuel_purchases.empty)
             with c2:
-                st.download_button("Solar Daily CSV", daily_solar.to_csv(index=False).encode('utf-8') if not daily_solar.empty else b"", file_name="solar_daily.csv", mime="text/csv", disabled=daily_solar.empty)
-                st.download_button("Hourly Solar CSV", hourly_solar.to_csv(index=False).encode('utf-8') if not hourly_solar.empty else b"", file_name="solar_hourly.csv", mime="text/csv", disabled=hourly_solar.empty)
+                st.download_button("Solar Daily CSV", daily_solar.to_csv(index=False).encode('utf-8') if not daily_solar.empty else b"", file_name="solar_daily.csv", mime="text/csv", key="dl_solar_daily_bottom", disabled=daily_solar.empty)
+                st.download_button("Hourly Solar CSV", hourly_solar.to_csv(index=False).encode('utf-8') if not hourly_solar.empty else b"", file_name="solar_hourly.csv", mime="text/csv", key="dl_solar_hourly_bottom", disabled=hourly_solar.empty)
             with c3:
-                st.download_button("Inverter Performance CSV", inverter_performance.to_csv(index=False).encode('utf-8') if not inverter_performance.empty else b"", file_name="inverter_performance.csv", mime="text/csv", disabled=inverter_performance.empty)
+                st.download_button("Inverter Performance CSV", inverter_performance.to_csv(index=False).encode('utf-8') if not inverter_performance.empty else b"", file_name="inverter_performance.csv", mime="text/csv", key="dl_inverter_perf_bottom", disabled=inverter_performance.empty)
 
         st.markdown("---")
 
