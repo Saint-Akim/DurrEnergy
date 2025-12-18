@@ -23,6 +23,13 @@ from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
 
+# Enhanced Solar Analysis - DEPLOYED 2025-12-18 17:08:56
+# 4 new sections should appear in Solar Performance tab:
+# 1. System Comparison Analysis (Legacy vs New)
+# 2. Hourly Power Generation Patterns  
+# 3. Inverter Power Performance Monitoring
+# 4. Power Generation Trends & Analysis
+
 # Import enhanced solar analysis functions
 from tmp_rovodev_enhanced_solar_functions import (
     analyze_legacy_solar_system,
