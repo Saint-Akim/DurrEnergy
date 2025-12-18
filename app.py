@@ -360,72 +360,83 @@ def render_clean_metric(label, value, delta=None, color="blue", icon="📊", des
 # ENHANCED FUEL ANALYSIS WITH REAL PRICING
 # ==============================================================================
 
+
+def normalize_purchase_columns(df):
+    """Normalize fuel purchase column names to standard format"""
+    if df.empty:
+        return df
+    
+    df = df.copy()
+    
+    # Normalize column names: lowercase, remove spaces/special chars
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(r'\s+', '_', regex=True)
+        .str.replace(r'[()]+', '', regex=True)
+    )
+    
+    # Map variations to standard names
+    rename_map = {
+        'amount_liters': 'litres',
+        'amountliters': 'litres',
+        'amount': 'litres',
+        'liters': 'litres',
+        'costrands': 'cost',
+        'cost_rands': 'cost',
+        'price_per_liter': 'price_per_litre'
+    }
+    
+    df = df.rename(columns={c: rename_map.get(c, c) for c in df.columns})
+    
+    # Coerce numeric fields
+    for col in ['litres', 'cost', 'price_per_litre']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # Parse date
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    
+    return df
+
 def process_fuel_purchases_and_pricing(fuel_purchases_df):
     """Process fuel purchase data to extract real pricing"""
     
     if fuel_purchases_df.empty:
-        return pd.DataFrame(), 22.50  # Default price
+        return pd.DataFrame(), 22.50
     
     try:
-        # Clean column names
-        fuel_purchases_df.columns = fuel_purchases_df.columns.str.lower().str.replace(' ', '_').str.replace('[^a-z0-9_]', '', regex=True)
+        # Normalize columns first
+        fuel_purchases_df = normalize_purchase_columns(fuel_purchases_df)
         
-        # Find date and price columns (case insensitive)
-        date_cols = [col for col in fuel_purchases_df.columns if 'date' in col.lower()]
-        price_cols = [col for col in fuel_purchases_df.columns if any(x in col.lower() for x in ['price', 'cost'])]
-        quantity_cols = [col for col in fuel_purchases_df.columns if any(x in col.lower() for x in ['liter', 'litre', 'quantity', 'volume', 'amount']) and 'price' not in col.lower()]
+        # Standard column names after normalization: date, litres, cost, price_per_litre
+        if 'date' not in fuel_purchases_df.columns:
+            return pd.DataFrame(), 22.50
         
-        if date_cols and price_cols:
-            # Process dates
-            fuel_purchases_df[date_cols[0]] = pd.to_datetime(fuel_purchases_df[date_cols[0]], errors='coerce')
-            
-            # Process prices and quantities
-            for col in price_cols + quantity_cols:
-                if col in fuel_purchases_df.columns:
-                    fuel_purchases_df[col] = pd.to_numeric(fuel_purchases_df[col], errors='coerce')
-            
-            # Calculate price per liter if not directly available
-            # Try to find price per litre column first (handle typos like 'price per litre itre')
-            price_per_litre_cols = [col for col in fuel_purchases_df.columns if 'price per' in col.lower() and ('litre' in col.lower() or 'liter' in col.lower())]
-            
-            if price_per_litre_cols:
-                # Use existing price per litre column
-                fuel_purchases_df['price_per_litre'] = pd.to_numeric(fuel_purchases_df[price_per_litre_cols[0]], errors='coerce')
-            elif quantity_cols and len(price_cols) > 0:
-                # Calculate from cost and quantity
-                cost_cols = [col for col in price_cols if 'cost' in col.lower() or 'rand' in col.lower()]
-                if cost_cols:
-                    total_col = cost_cols[0]
-                else:
-                    total_col = price_cols[0]
-                quantity_col = quantity_cols[0]
-                
-                fuel_purchases_df['price_per_litre'] = pd.to_numeric(fuel_purchases_df[total_col], errors='coerce') / pd.to_numeric(fuel_purchases_df[quantity_col], errors='coerce')
-            
-            # Clean calculated values and handle missing data
-            if 'price_per_litre' in fuel_purchases_df.columns:
-                fuel_purchases_df['price_per_litre'] = fuel_purchases_df['price_per_litre'].replace([np.inf, -np.inf], np.nan)
-                # Fill NaN values with overall average if available
-                if not fuel_purchases_df['price_per_litre'].isna().all():
-                    avg_price = fuel_purchases_df['price_per_litre'].mean()
-                    fuel_purchases_df['price_per_litre'] = fuel_purchases_df['price_per_litre'].fillna(avg_price)
-            
-            # Clean data
-            fuel_purchases_df = fuel_purchases_df.dropna(subset=[date_cols[0]])
-            
-            if 'price_per_litre' in fuel_purchases_df.columns:
-                fuel_purchases_df = fuel_purchases_df[fuel_purchases_df['price_per_litre'] > 0]
-                fuel_purchases_df = fuel_purchases_df[fuel_purchases_df['price_per_litre'] < 50]  # Reasonable range
-                
-                # Get average price
-                avg_price = fuel_purchases_df['price_per_litre'].mean()
-                
-                return fuel_purchases_df, avg_price
+        # Process dates
+        fuel_purchases_df['date'] = pd.to_datetime(fuel_purchases_df['date'], errors='coerce')
+        fuel_purchases_df = fuel_purchases_df.dropna(subset=['date'])
         
+        # Calculate price_per_litre if needed
+        if 'price_per_litre' not in fuel_purchases_df.columns and 'litres' in fuel_purchases_df.columns and 'cost' in fuel_purchases_df.columns:
+            fuel_purchases_df['price_per_litre'] = fuel_purchases_df['cost'] / fuel_purchases_df['litres']
+        
+        # Clean price data
+        if 'price_per_litre' in fuel_purchases_df.columns:
+            fuel_purchases_df['price_per_litre'] = fuel_purchases_df['price_per_litre'].replace([np.inf, -np.inf], np.nan)
+            fuel_purchases_df = fuel_purchases_df[fuel_purchases_df['price_per_litre'] > 0]
+            fuel_purchases_df = fuel_purchases_df[fuel_purchases_df['price_per_litre'] < 50]
+            
+            avg_price = fuel_purchases_df['price_per_litre'].mean()
+            return fuel_purchases_df, avg_price
+    
     except Exception as e:
-        st.warning(f"Error processing fuel purchase data: {e}")
+        print(f"Error processing fuel purchase data: {e}")
     
     return pd.DataFrame(), 22.50
+
 
 @st.cache_data(ttl=600, show_spinner=False)
 def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df, gen_detailed_df, start_date, end_date, pricing_mode="nearest_prior"):
@@ -1323,10 +1334,13 @@ def main():
                             
                             # Get purchase data by month
                             fuel_purchases['month'] = pd.to_datetime(fuel_purchases['date']).dt.to_period('M').dt.to_timestamp()
-                            purchase_monthly = fuel_purchases.groupby('month').agg({
-                                'amount(liters)': 'sum',
-                                'Cost(Rands)': 'sum'
+                            # Normalize fuel_purchases columns
+                            fuel_purchases_norm = normalize_purchase_columns(fuel_purchases)
+                            purchase_monthly = fuel_purchases_norm.groupby('month').agg({
+                                'litres': 'sum',
+                                'cost': 'sum'
                             }).reset_index()
+                            purchase_monthly = purchase_monthly.rename(columns={'litres': 'purchased_litres', 'cost': 'purchase_cost'})
                             purchase_monthly.rename(columns={'amount(liters)': 'purchased_litres', 'Cost(Rands)': 'purchase_cost'}, inplace=True)
                             
                             # Get consumption data by month
