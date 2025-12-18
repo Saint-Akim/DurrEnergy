@@ -911,9 +911,9 @@ def create_ultra_interactive_chart(df, x_col, y_col, title, color="#3b82f6", cha
     
     # Enable selection if requested
     if enable_selection:
+        # Enable selection; omit selectdirection to maintain compatibility across Plotly versions
         fig.update_layout(
-            dragmode='select',
-            selectdirection='diagonal'
+            dragmode='select'
         )
     
     # Display chart with FIXED width parameter
