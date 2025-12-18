@@ -338,8 +338,8 @@ def load_all_energy_data_silent():
 # ENHANCED METRIC DISPLAY
 # ==============================================================================
 
-def render_clean_metric(label, value, delta=None, color="blue", icon="📊", description=None):
-    """Clean metric using native Streamlit components"""
+def render_clean_metric(label, value, delta=None, color="blue", icon="📊", description=None, trend_data=None):
+    """Clean metric using native Streamlit components - supports old function signature"""
     
     # Use native Streamlit components
     with st.container():
