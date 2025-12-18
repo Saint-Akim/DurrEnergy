@@ -390,7 +390,7 @@ def process_fuel_purchases_and_pricing(fuel_purchases_df):
             
             if price_per_litre_cols:
                 # Use existing price per litre column
-                fuel_purchases_df['price_per_litre'] = fuel_purchases_df[price_per_litre_cols[0]]
+                fuel_purchases_df['price_per_litre'] = pd.to_numeric(fuel_purchases_df[price_per_litre_cols[0]], errors='coerce')
             elif quantity_cols and len(price_cols) > 0:
                 # Calculate from cost and quantity
                 cost_cols = [col for col in price_cols if 'cost' in col.lower() or 'rand' in col.lower()]
@@ -400,11 +400,15 @@ def process_fuel_purchases_and_pricing(fuel_purchases_df):
                     total_col = price_cols[0]
                 quantity_col = quantity_cols[0]
                 
-                fuel_purchases_df['price_per_litre'] = fuel_purchases_df[total_col] / fuel_purchases_df[quantity_col]
+                fuel_purchases_df['price_per_litre'] = pd.to_numeric(fuel_purchases_df[total_col], errors='coerce') / pd.to_numeric(fuel_purchases_df[quantity_col], errors='coerce')
             
-            # Clean calculated values
+            # Clean calculated values and handle missing data
             if 'price_per_litre' in fuel_purchases_df.columns:
                 fuel_purchases_df['price_per_litre'] = fuel_purchases_df['price_per_litre'].replace([np.inf, -np.inf], np.nan)
+                # Fill NaN values with overall average if available
+                if not fuel_purchases_df['price_per_litre'].isna().all():
+                    avg_price = fuel_purchases_df['price_per_litre'].mean()
+                    fuel_purchases_df['price_per_litre'] = fuel_purchases_df['price_per_litre'].fillna(avg_price)
             
             # Clean data
             fuel_purchases_df = fuel_purchases_df.dropna(subset=[date_cols[0]])
@@ -1284,12 +1288,15 @@ def main():
                                 monthly, 'month', 'litres',
                                 'Monthly Fuel Purchased (L)', '#10b981', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
                             )
-                        if price_col:
-                            with c2m:
-                                create_ultra_interactive_chart(
-                                    monthly, 'month', price_col,
-                                    'Monthly Avg Price per Litre', '#f59e0b', 'line', height=350, enable_zoom=True, selection_mode=selection_mode
-                                )
+                        if price_col and not monthly.empty and price_col in monthly.columns:
+                            # Ensure price data is valid
+                            monthly_clean = monthly.dropna(subset=[price_col])
+                            if not monthly_clean.empty:
+                                with c2m:
+                                    create_ultra_interactive_chart(
+                                        monthly_clean, 'month', price_col,
+                                        'Monthly Avg Price per Litre', '#f59e0b', 'line', height=350, enable_zoom=True, selection_mode=selection_mode
+                                    )
                         # Monthly Generator Cost chart
                         if not daily_fuel.empty:
                             monthly_cost = daily_fuel.copy()
@@ -1301,6 +1308,101 @@ def main():
                                     monthly_cost_agg, 'month', 'monthly_cost_rands',
                                     'Monthly Generator Cost (R)', '#ef4444', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
                                 )
+                        
+                        # Fuel Purchase vs Consumption Analysis
+                        st.subheader("💡 Fuel Purchase vs Consumption Analysis")
+                        
+                        if not fuel_purchases.empty and not daily_fuel.empty:
+                            # Create comprehensive analysis
+                            analysis_data = []
+                            
+                            # Get purchase data by month
+                            fuel_purchases['month'] = pd.to_datetime(fuel_purchases['date']).dt.to_period('M').dt.to_timestamp()
+                            purchase_monthly = fuel_purchases.groupby('month').agg({
+                                'amount(liters)': 'sum',
+                                'Cost(Rands)': 'sum'
+                            }).reset_index()
+                            purchase_monthly.rename(columns={'amount(liters)': 'purchased_litres', 'Cost(Rands)': 'purchase_cost'}, inplace=True)
+                            
+                            # Get consumption data by month
+                            consumption_monthly = daily_fuel.copy()
+                            consumption_monthly['month'] = consumption_monthly['date'].dt.to_period('M').dt.to_timestamp()
+                            consumed_monthly = consumption_monthly.groupby('month').agg({
+                                'fuel_consumed_liters': 'sum',
+                                'daily_cost_rands': 'sum'
+                            }).reset_index()
+                            consumed_monthly.rename(columns={'fuel_consumed_liters': 'consumed_litres', 'daily_cost_rands': 'consumption_cost'}, inplace=True)
+                            
+                            # Merge purchase and consumption data
+                            comparison_df = pd.merge(purchase_monthly, consumed_monthly, on='month', how='outer').fillna(0)
+                            comparison_df['net_fuel'] = comparison_df['purchased_litres'] - comparison_df['consumed_litres']
+                            comparison_df['utilization_rate'] = (comparison_df['consumed_litres'] / comparison_df['purchased_litres'] * 100).fillna(0)
+                            
+                            # Display comparison charts
+                            comp_col1, comp_col2 = st.columns(2)
+                            
+                            if not comparison_df.empty:
+                                with comp_col1:
+                                    # Create dual-bar chart for purchased vs consumed
+                                    import plotly.graph_objects as go
+                                    
+                                    fig = go.Figure()
+                                    fig.add_trace(go.Bar(
+                                        x=comparison_df['month'],
+                                        y=comparison_df['purchased_litres'],
+                                        name='Purchased (L)',
+                                        marker_color='#10b981'
+                                    ))
+                                    fig.add_trace(go.Bar(
+                                        x=comparison_df['month'],
+                                        y=comparison_df['consumed_litres'],
+                                        name='Consumed (L)',
+                                        marker_color='#ef4444'
+                                    ))
+                                    
+                                    fig.update_layout(
+                                        title="Monthly Fuel: Purchased vs Consumed",
+                                        xaxis_title="Month",
+                                        yaxis_title="Litres",
+                                        barmode='group',
+                                        height=400
+                                    )
+                                    
+                                    st.plotly_chart(fig, width='stretch')
+                                
+                                with comp_col2:
+                                    # Net fuel balance
+                                    create_ultra_interactive_chart(
+                                        comparison_df, 'month', 'net_fuel',
+                                        'Monthly Net Fuel Balance (L)', '#8b5cf6', 'bar', height=400, enable_zoom=True, selection_mode=selection_mode
+                                    )
+                            
+                            # Summary metrics
+                            st.markdown("#### 📈 Purchase vs Consumption Summary")
+                            sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4)
+                            
+                            total_purchased = comparison_df['purchased_litres'].sum()
+                            total_consumed = comparison_df['consumed_litres'].sum()
+                            net_balance = total_purchased - total_consumed
+                            overall_utilization = (total_consumed / total_purchased * 100) if total_purchased > 0 else 0
+                            
+                            with sum_col1:
+                                render_clean_metric("Total Purchased", f"{total_purchased:.1f} L", f"From {len(fuel_purchases)} purchases", "green", "⛽")
+                            with sum_col2:
+                                render_clean_metric("Total Consumed", f"{total_consumed:.1f} L", f"Generator usage", "red", "🔥")
+                            with sum_col3:
+                                render_clean_metric("Net Balance", f"{net_balance:.1f} L", "Remaining/Deficit", "purple", "📊")
+                            with sum_col4:
+                                render_clean_metric("Utilization Rate", f"{overall_utilization:.1f}%", "Efficiency metric", "cyan", "⚡")
+                            
+                            # Download comparison data
+                            st.download_button(
+                                'Download Purchase vs Consumption Analysis',
+                                comparison_df.to_csv(index=False).encode('utf-8'),
+                                file_name='fuel_purchase_consumption_analysis.csv',
+                                mime='text/csv',
+                                key='dl_comparison_analysis'
+                            )
                         st.download_button('Monthly Purchases CSV', monthly.to_csv(index=False).encode('utf-8'), file_name='fuel_purchases_monthly.csv', mime='text/csv', key='dl_monthly_purchases')
                         if not daily_fuel.empty:
                             st.download_button('Monthly Generator Cost CSV', monthly_cost_agg.to_csv(index=False).encode('utf-8'), file_name='monthly_generator_cost.csv', mime='text/csv', key='dl_monthly_generator_cost')
