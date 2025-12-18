@@ -1585,6 +1585,9 @@ def main():
             st.markdown("---")
             st.markdown("### 📊 System Comparison Analysis")
             
+            # POWER-FOCUSED ANALYSIS (Main focus: Power capacity and generation patterns)
+            st.info("🔧 **Focus: Power Analysis** - Analyzing system power capacity, peak performance, and generation patterns")
+            
             try:
                 # Analyze legacy system (automatically uses previous_inverter_system.csv)
                 legacy_daily, legacy_stats = analyze_legacy_solar_system()
@@ -1602,7 +1605,7 @@ def main():
                     
                     with col1:
                         render_clean_metric(
-                            "Peak Capacity",
+                            "Peak Power Capacity",
                             f"{comparison['new_peak_kw']:.1f} kW",
                             f"↗️ +{comparison['peak_capacity_improvement_pct']:.1f}% vs legacy",
                             "green", "⚡",
@@ -1611,11 +1614,11 @@ def main():
                     
                     with col2:
                         render_clean_metric(
-                            "Daily Generation",
-                            f"{comparison['new_avg_daily']:.1f} kWh/day",
+                            "Avg Power Output",
+                            f"{comparison['new_avg_daily']/24:.1f} kW avg",
                             f"↗️ +{comparison['daily_generation_improvement_pct']:.1f}% vs legacy",
                             "green", "☀️",
-                            f"Legacy: {comparison['legacy_avg_daily']:.1f} kWh/day"
+                            f"Legacy: {comparison['legacy_avg_daily']/24:.1f} kW avg"
                         )
                     
                     with col3:
@@ -1631,13 +1634,17 @@ def main():
                     st.info(f"ℹ️ **Note:** {comparison['seasonal_note']}")
                     
             except Exception as e:
-                st.warning(f"System comparison not available: {str(e)}")
+                st.error(f"⚠️ **System Comparison Error:** {str(e)}")
+                st.code(f"Debug info: Check if previous_inverter_system.csv exists and is readable")
+                import traceback
+                st.code(traceback.format_exc())
             
-            # Hourly Generation Patterns
+            # Hourly POWER Patterns (Focus: Power output by hour)
             st.markdown("---")
-            st.markdown("### 🕐 Hourly Generation Patterns")
+            st.markdown("### 🕐 Hourly Power Generation Patterns")
             
             if not all_data['solar'].empty:
+                st.info("📊 **Power Focus:** Analyzing average power output patterns throughout the day")
                 try:
                     hourly_pattern = calculate_hourly_generation_pattern(all_data['solar'])
                     
@@ -1658,9 +1665,9 @@ def main():
                         ))
                         
                         fig_hourly.update_layout(
-                            title="Average Generation by Hour of Day",
+                            title="🔋 Power Output Patterns Throughout the Day",
                             xaxis_title="Hour of Day",
-                            yaxis_title="Average Power (kW)",
+                            yaxis_title="Average Power Output (kW)",
                             paper_bgcolor='rgba(0,0,0,0)',
                             plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(color='#e2e8f0'),
@@ -1676,11 +1683,13 @@ def main():
                             st.success(f"🌟 Peak Generation Hours: {', '.join([f'{h:02d}:00' for h in peak_hours])}")
                     
                 except Exception as e:
-                    st.warning(f"Hourly pattern analysis not available: {str(e)}")
+                    st.error(f"⚠️ **Hourly Power Pattern Error:** {str(e)}")
+                    st.code("Debug: Check solar data format and availability")
             
-            # Inverter Performance Monitoring
+            # Inverter POWER Performance Monitoring
             st.markdown("---")
-            st.markdown("### 🔌 Inverter Performance Monitoring")
+            st.markdown("### 🔌 Inverter Power Performance Monitoring")
+            st.info("⚡ **Power Focus:** Monitoring individual inverter power output and capacity utilization")
             
             if not inverter_performance.empty:
                 try:
@@ -1722,11 +1731,13 @@ def main():
                             )
                 
                 except Exception as e:
-                    st.warning(f"Inverter monitoring not available: {str(e)}")
+                    st.error(f"⚠️ **Inverter Monitoring Error:** {str(e)}")
+                    st.code("Debug: Check inverter performance data")
             
-            # Generation Trends
+            # Power Generation Trends
             st.markdown("---")
-            st.markdown("### 📈 Generation Trends & Forecasting")
+            st.markdown("### 📈 Power Generation Trends & Analysis")
+            st.info("📈 **Power Focus:** Tracking power generation trends and identifying performance patterns")
             
             if not daily_solar.empty and len(daily_solar) >= 7:
                 try:
@@ -1754,9 +1765,9 @@ def main():
                         ))
                         
                         fig_trend.update_layout(
-                            title="Generation Trends (7-Day Rolling Average)",
+                            title="🔋 Power Generation Trends (7-Day Rolling Average)",
                             xaxis_title="Date",
-                            yaxis_title="Generation (kWh)",
+                            yaxis_title="Daily Power Generation (kWh equivalent)",
                             paper_bgcolor='rgba(0,0,0,0)',
                             plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(color='#e2e8f0'),
@@ -1776,7 +1787,8 @@ def main():
                         st.info(trend_icons.get(latest_trend, 'Trend analysis'))
                 
                 except Exception as e:
-                    st.warning(f"Trend analysis not available: {str(e)}")
+                    st.error(f"⚠️ **Trend Analysis Error:** {str(e)}")
+                    st.code("Debug: Check daily solar data for trend calculation")
             
             st.info("📊 No solar data available for selected period")
     
