@@ -389,7 +389,6 @@ def render_ultra_modern_metric(label, value, delta=None, color="blue", icon="ðŸ“
                                    margin-bottom: 8px; letter-spacing: -0.03em; line-height: 1;">{value}</div>
                         {delta_html}
                     </div>
-                    {sparkline_html}
                 </div>
             </div>
         """, unsafe_allow_html=True)
