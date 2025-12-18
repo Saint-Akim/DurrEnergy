@@ -424,14 +424,14 @@ def process_fuel_purchases_and_pricing(fuel_purchases_df):
     return pd.DataFrame(), 22.50
 
 @st.cache_data(ttl=600, show_spinner=False)
-def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df, start_date, end_date, pricing_mode="nearest_prior"):
+def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df, gen_detailed_df, start_date, end_date, pricing_mode="nearest_prior"):
     """Enhanced dual-source fuel analysis with accurate pricing from purchases"""
     
     # Process fuel purchases for real pricing
     fuel_purchases_clean, avg_fuel_price = process_fuel_purchases_and_pricing(fuel_purchases_df)
     
     # Enhanced dual-source consumption computation (detailed CSV + backup)
-    daily_primary = compute_primary_consumption(gen_df, all_data.get('generator_detailed', pd.DataFrame()), start_date, end_date)
+    daily_primary = compute_primary_consumption(gen_df, gen_detailed_df, start_date, end_date)
     daily_backup = compute_backup_consumption(fuel_history_df, start_date, end_date)
     
     # Smart combination: Use primary source preferentially, backup only when primary is missing/low
@@ -1122,6 +1122,7 @@ def main():
             all_data.get('generator', pd.DataFrame()),
             all_data.get('fuel_history', pd.DataFrame()),
             all_data.get('fuel_purchases', pd.DataFrame()),
+            all_data.get('generator_detailed', pd.DataFrame()),
             start_date, end_date
         )
         
