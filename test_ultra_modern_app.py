@@ -8,7 +8,7 @@ import subprocess
 import importlib.util
 from pathlib import Path
 
-APP_FILE = "app_ultra_modern_improved.py"
+APP_FILE = "app.py"
 HERE = Path(__file__).resolve().parent
 os.chdir(HERE)
 
@@ -111,7 +111,7 @@ def main():
 
     if all_passed:
         print("\n🎉 Smoke tests passed.")
-        print("To run locally: streamlit run app_ultra_modern_improved.py")
+        print("To run locally: streamlit run app.py")
     else:
         print("\n❌ Some checks failed. See logs above.")
     return 0 if all_passed else 1

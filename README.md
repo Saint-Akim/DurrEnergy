@@ -3,10 +3,10 @@
 A self-contained Streamlit dashboard app for solar performance analytics.
 
 ## Contents
-- `app_ultra_modern_improved.py` – main Streamlit app
+- `app.py` – main Streamlit app
 - `.streamlit/config.toml` – Streamlit theme/config
 - Data files used by the app (CSV/XLSX)
-- `test_ultra_modern_app.py` – optional smoke test
+- `test_ultra_modern_app.py` – optional smoke test (updated to reference app.py)
 
 ## Quick start
 1) Install Python 3.10+
@@ -14,7 +14,7 @@ A self-contained Streamlit dashboard app for solar performance analytics.
 3) Install requirements:
    - Minimal: `pip install streamlit pandas plotly requests openpyxl numpy`
 4) Run the app:
-   - `streamlit run app_ultra_modern_improved.py`
+   - `streamlit run app.py`
 
 ## Smoke test (optional)
 Run a quick compatibility check:
