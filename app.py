@@ -1149,7 +1149,7 @@ def main():
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Total Fuel Consumed",
                     f"{fuel_stats['total_fuel_liters']:,.1f} L",
                     f"📈 Real pricing used",
@@ -1159,7 +1159,7 @@ def main():
                 )
             
             with col2:
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Total Fuel Cost",
                     f"R {fuel_stats['total_cost_rands']:,.0f}",
                     f"💰 R{fuel_stats['average_cost_per_liter']:.2f}/L market avg",
@@ -1170,7 +1170,7 @@ def main():
             
             with col3:
                 efficiency = fuel_stats.get('average_efficiency', 0)
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Generator Efficiency",
                     f"{efficiency:.1f}%",
                     f"⚡ Runtime: {fuel_stats.get('total_runtime_hours', 0):.0f}h",
@@ -1179,7 +1179,7 @@ def main():
                 )
             
             with col4:
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Daily Average",
                     f"{fuel_stats.get('average_daily_fuel', 0):.1f} L/day",
                     f"📅 Over {fuel_stats.get('period_days', 0)} days",
@@ -1237,7 +1237,7 @@ def main():
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    render_ultra_modern_metric(
+                    render_clean_metric(
                         "Fuel Purchased",
                         f"{total_purchased:,.0f} L",
                         f"📦 Total bought",
@@ -1246,7 +1246,7 @@ def main():
                     )
                 
                 with col2:
-                    render_ultra_modern_metric(
+                    render_clean_metric(
                         "Fuel Consumed",
                         f"{total_consumed:,.0f} L",
                         f"⛽ Total used",
@@ -1256,7 +1256,7 @@ def main():
                 
                 with col3:
                     balance = total_purchased - total_consumed
-                    render_ultra_modern_metric(
+                    render_clean_metric(
                         "Fuel Balance",
                         f"{balance:,.0f} L",
                         "📊 Inventory status",
@@ -1316,7 +1316,7 @@ def main():
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Total Generation",
                     f"{solar_stats['total_generation_kwh']:,.0f} kWh",
                     f"💰 Value: R{solar_stats['total_value_rands']:,.0f}",
@@ -1330,7 +1330,7 @@ def main():
                 new_inverters = solar_stats.get('new_inverters_added', 0)
                 improvement = solar_stats.get('capacity_improvement_percent', 0)
                 
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "System Upgrade",
                     f"{new_inverters} New Inverters" if new_inverters > 0 else f"{solar_stats.get('average_inverter_count', 0):.0f} Inverters",
                     f"🚀 Improvement: +{improvement:.1f}%" if improvement > 0 else f"⚡ Peak: {solar_stats['peak_system_power_kw']:.1f} kW",
@@ -1339,7 +1339,7 @@ def main():
                 )
             
             with col3:
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Performance Factor",
                     f"{solar_stats['average_capacity_factor']:.1f}%",
                     f"🏆 Best day: {solar_stats.get('best_day_kwh', 0):.0f} kWh",
@@ -1348,7 +1348,7 @@ def main():
                 )
             
             with col4:
-                render_ultra_modern_metric(
+                render_clean_metric(
                     "Carbon Offset",
                     f"{solar_stats['carbon_offset_kg']:,.0f} kg",
                     "🌱 CO₂ avoided",
@@ -1386,7 +1386,7 @@ def main():
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    render_ultra_modern_metric(
+                    render_clean_metric(
                         "System Upgrade",
                         "✅ Complete",
                         f"🔄 Fronius removed • +2 inverters",
@@ -1396,7 +1396,7 @@ def main():
                 
                 with col2:
                     monthly_savings = solar_stats.get('estimated_monthly_savings', 0)
-                    render_ultra_modern_metric(
+                    render_clean_metric(
                         "Monthly Value",
                         f"R {monthly_savings:,.0f}",
                         f"💰 Improved generation capacity",
@@ -1406,7 +1406,7 @@ def main():
                 
                 with col3:
                     improvement = solar_stats.get('capacity_improvement_percent', 0)
-                    render_ultra_modern_metric(
+                    render_clean_metric(
                         "Performance Gain",
                         f"+{improvement:.1f}%",
                         "📈 Capacity improvement",
@@ -1507,7 +1507,7 @@ def main():
         
         with col1:
             data_quality = (data_available / 3) * 100
-            render_ultra_modern_metric(
+            render_clean_metric(
                 "System Health",
                 f"{data_quality:.0f}%",
                 "📊 Data coverage",
@@ -1515,7 +1515,7 @@ def main():
             )
         
         with col2:
-            render_ultra_modern_metric(
+            render_clean_metric(
                 "Active Systems",
                 f"{data_available}/3",
                 "⚡ Online modules",
@@ -1525,7 +1525,7 @@ def main():
         with col3:
             total_cost = fuel_stats.get('total_cost_rands', 0)
             solar_value = solar_stats.get('total_value_rands', 0)
-            render_ultra_modern_metric(
+            render_clean_metric(
                 "Net Energy Cost",
                 f"R {total_cost - solar_value:,.0f}",
                 f"💰 After solar savings",
@@ -1533,7 +1533,7 @@ def main():
             )
         
         with col4:
-            render_ultra_modern_metric(
+            render_clean_metric(
                 "Data Freshness",
                 "Live",
                 f"🕐 {datetime.now().strftime('%H:%M')}",
