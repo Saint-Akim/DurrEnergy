@@ -30,20 +30,21 @@ warnings.filterwarnings('ignore')
 # 3. Inverter Power Performance Monitoring
 # 4. Power Generation Trends & Analysis
 
-# Import enhanced solar analysis functions
+# Import enhanced solar analysis functions - POST-REVIEW VERSION
 try:
-    from tmp_rovodev_solar_analysis import (
-        analyze_legacy_system,
-        analyze_new_system,
-        compare_solar_systems,
-        create_before_after_chart,
-        create_capacity_utilization_analysis,
-        generate_engineering_report
+    from tmp_rovodev_enhanced_solar_analysis import (
+        analyze_legacy_system_enhanced,
+        analyze_new_system_enhanced,
+        compare_solar_systems_enhanced,
+        create_enhanced_comparison_chart,
+        validate_data_quality,
+        SA_SOLAR_BENCHMARKS
     )
     SOLAR_ANALYSIS_AVAILABLE = True
+    print("✅ Enhanced solar analysis module loaded with review improvements")
 except ImportError:
     SOLAR_ANALYSIS_AVAILABLE = False
-    print("Solar analysis module not available - using fallback functions")
+    print("⚠️ Enhanced solar analysis module not available - using fallback functions")
 
 # ==============================================================================
 # ULTRA-MODERN PAGE CONFIGURATION
