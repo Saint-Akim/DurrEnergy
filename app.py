@@ -31,15 +31,19 @@ warnings.filterwarnings('ignore')
 # 4. Power Generation Trends & Analysis
 
 # Import enhanced solar analysis functions
-from tmp_rovodev_enhanced_solar_functions import (
-    analyze_legacy_solar_system,
-    analyze_new_3inverter_system,
-    compare_solar_systems,
-    calculate_hourly_generation_pattern,
-    identify_underperforming_inverter,
-    calculate_generation_trends,
-    calculate_financial_metrics
-)
+try:
+    from tmp_rovodev_solar_analysis import (
+        analyze_legacy_system,
+        analyze_new_system,
+        compare_solar_systems,
+        create_before_after_chart,
+        create_capacity_utilization_analysis,
+        generate_engineering_report
+    )
+    SOLAR_ANALYSIS_AVAILABLE = True
+except ImportError:
+    SOLAR_ANALYSIS_AVAILABLE = False
+    print("Solar analysis module not available - using fallback functions")
 
 # ==============================================================================
 # ULTRA-MODERN PAGE CONFIGURATION
