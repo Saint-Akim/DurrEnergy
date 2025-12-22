@@ -123,7 +123,7 @@ class SolarSystemAnalyzer:
             day_data = pre_upgrade[pre_upgrade['date'] == date]
             
             # Calculate total system power for each timestamp, then aggregate
-            hourly_totals = day_data.groupby(day_data['timestamp'].dt.floor('H'))['power_kw'].sum()
+            hourly_totals = day_data.groupby(day_data['timestamp'].dt.floor('h'))['power_kw'].sum()
             
             if len(hourly_totals) > 0:
                 # More realistic energy calculation: sum of hourly averages
@@ -185,7 +185,7 @@ class SolarSystemAnalyzer:
             day_data = post_upgrade[post_upgrade['date'] == date]
             
             # Calculate total system power for each timestamp, then aggregate
-            hourly_totals = day_data.groupby(day_data['timestamp'].dt.floor('H'))['power_kw'].sum()
+            hourly_totals = day_data.groupby(day_data['timestamp'].dt.floor('h'))['power_kw'].sum()
             
             if len(hourly_totals) > 0:
                 # More realistic energy calculation: sum of hourly averages  
