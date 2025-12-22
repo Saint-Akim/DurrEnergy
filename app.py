@@ -23,28 +23,17 @@ from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
 
-# Enhanced Solar Analysis - DEPLOYED 2025-12-18 17:08:56
-# 4 new sections should appear in Solar Performance tab:
-# 1. System Comparison Analysis (Legacy vs New)
-# 2. Hourly Power Generation Patterns  
-# 3. Inverter Power Performance Monitoring
-# 4. Power Generation Trends & Analysis
+# Professional Solar Performance Analysis - PRODUCTION 2025-12-17
+# Complete replacement of existing solar logic with engineering-grade analysis
+# Focus: November 2025 upgrade impact (4-inverter legacy vs 3-inverter new)
 
-# Import enhanced solar analysis functions - POST-REVIEW VERSION
 try:
-    from tmp_rovodev_enhanced_solar_analysis import (
-        analyze_legacy_system_enhanced,
-        analyze_new_system_enhanced,
-        compare_solar_systems_enhanced,
-        create_enhanced_comparison_chart,
-        validate_data_quality,
-        SA_SOLAR_BENCHMARKS
-    )
+    from solar_dashboard import render_solar_performance_tab
     SOLAR_ANALYSIS_AVAILABLE = True
-    print("✅ Enhanced solar analysis module loaded with review improvements")
+    print("✅ Professional solar performance analysis loaded")
 except ImportError:
     SOLAR_ANALYSIS_AVAILABLE = False
-    print("⚠️ Enhanced solar analysis module not available - using fallback functions")
+    print("⚠️ Professional solar analysis module not available - using fallback")
 
 # ==============================================================================
 # ULTRA-MODERN PAGE CONFIGURATION
@@ -1451,10 +1440,15 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab (ENHANCED WITH 3-INVERTER SYSTEM)
+    # Solar Performance Tab - PROFESSIONAL ENGINEERING ANALYSIS
     with tab2:
-        st.header("☀️ Solar Performance")
-        st.markdown("**3-Inverter system monitoring with capacity analysis**")
+        if SOLAR_ANALYSIS_AVAILABLE:
+            render_solar_performance_tab()
+        else:
+            st.error("❌ **Professional Solar Analysis Unavailable**")
+            st.markdown("### 🔧 Fallback: Basic Analysis")
+            st.header("☀️ Solar Performance")
+            st.markdown("**3-Inverter system monitoring with capacity analysis**")
         
         if not daily_solar.empty and solar_stats:
             # Enhanced solar metrics
