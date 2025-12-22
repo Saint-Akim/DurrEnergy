@@ -36,13 +36,24 @@ def aggregate_daily_data(df):
     
     df['date'] = df['timestamp'].dt.date
     
-    daily = df.groupby(['date', 'system']).agg({
-        'power_kw': ['sum', 'max', 'mean', 'count'],
-        'entity_id': 'nunique'
+    # Group by date and system, then sum individual inverter readings by hour first
+    df['hour'] = df['timestamp'].dt.floor('h')
+    
+    # Sum all inverters per hour, then aggregate to daily
+    hourly = df.groupby(['hour', 'system'])['power_kw'].sum().reset_index()
+    hourly['date'] = hourly['hour'].dt.date
+    
+    daily = hourly.groupby(['date', 'system']).agg({
+        'power_kw': ['sum', 'max', 'mean', 'count']
     }).reset_index()
     
-    # Flatten column names
-    daily.columns = ['date', 'system', 'total_kwh', 'peak_kw', 'avg_kw', 'readings', 'inverter_count']
+    # Flatten column names and convert sum to kWh (sum of hourly kW readings)
+    daily.columns = ['date', 'system', 'total_kwh', 'peak_kw', 'avg_kw', 'readings']
+    
+    # Add inverter count from original data
+    inverter_counts = df.groupby(['date', 'system'])['entity_id'].nunique().reset_index()
+    daily = daily.merge(inverter_counts, on=['date', 'system'], how='left')
+    daily.rename(columns={'entity_id': 'inverter_count'}, inplace=True)
     daily['date'] = pd.to_datetime(daily['date'])
     
     return daily
@@ -66,7 +77,7 @@ def create_comparison_charts(old_data, new_data):
         title='Daily Energy Generation - Old vs New System',
         labels={'total_kwh': 'Daily Energy (kWh)', 'date': 'Date'}
     )
-    fig1.add_vline(x=pd.to_datetime("2025-11-01"), line_dash="dash", annotation_text="System Change")
+    fig1.add_vline(x="2025-11-01", line_dash="dash", annotation_text="System Change")
     st.plotly_chart(fig1, use_container_width=True)
     
     # Chart 2: Daily Peak Power Timeline
@@ -78,7 +89,7 @@ def create_comparison_charts(old_data, new_data):
         title='Daily Peak Power - Old vs New System',
         labels={'peak_kw': 'Peak Power (kW)', 'date': 'Date'}
     )
-    fig2.add_vline(x=pd.to_datetime("2025-11-01"), line_dash="dash", annotation_text="System Change")
+    fig2.add_vline(x="2025-11-01", line_dash="dash", annotation_text="System Change")
     st.plotly_chart(fig2, use_container_width=True)
     
     # Chart 3: Box Plot Comparison
