@@ -1440,15 +1440,15 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab - PROFESSIONAL ENGINEERING ANALYSIS
+    # Solar Performance Tab - SIMPLE COMPARISON ONLY
     with tab2:
-        if SOLAR_ANALYSIS_AVAILABLE:
-            render_solar_performance_tab()
-        else:
-            st.error("❌ **Professional Solar Analysis Unavailable**")
-            st.markdown("### 🔧 Fallback: Basic Analysis")
+        try:
+            from simple_solar_comparison import render_simple_solar_comparison
+            render_simple_solar_comparison()
+        except ImportError:
+            st.error("❌ Simple solar comparison module not available")
             st.header("☀️ Solar Performance")
-            st.markdown("**3-Inverter system monitoring with capacity analysis**")
+            st.markdown("**Basic solar data display**")
         
         if not daily_solar.empty and solar_stats:
             # Enhanced solar metrics
