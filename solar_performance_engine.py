@@ -126,12 +126,18 @@ class SolarSystemAnalyzer:
             hourly_totals = day_data.groupby(day_data['timestamp'].dt.floor('H'))['power_kw'].sum()
             
             if len(hourly_totals) > 0:
+                # More realistic energy calculation: sum of hourly averages
+                total_kwh = hourly_totals.sum() if len(hourly_totals) > 0 else 0
+                peak_kw = hourly_totals.max() if len(hourly_totals) > 0 else 0
+                avg_kw = hourly_totals.mean() if len(hourly_totals) > 0 else 0
+                capacity_factor = min(1.0, peak_kw / PRE_UPGRADE_NOMINAL_CAPACITY) if PRE_UPGRADE_NOMINAL_CAPACITY > 0 else 0
+                
                 daily_stats.append({
                     'date': date,
-                    'total_kwh': hourly_totals.mean() * len(hourly_totals),  # Simplified energy calc
-                    'peak_kw': hourly_totals.max(),
-                    'avg_kw': hourly_totals.mean(),
-                    'capacity_factor': hourly_totals.max() / PRE_UPGRADE_NOMINAL_CAPACITY,
+                    'total_kwh': total_kwh,
+                    'peak_kw': peak_kw,
+                    'avg_kw': avg_kw,
+                    'capacity_factor': capacity_factor,
                     'operating_hours': len(hourly_totals[hourly_totals > 1.0])  # Hours with meaningful generation
                 })
         
@@ -182,12 +188,18 @@ class SolarSystemAnalyzer:
             hourly_totals = day_data.groupby(day_data['timestamp'].dt.floor('H'))['power_kw'].sum()
             
             if len(hourly_totals) > 0:
+                # More realistic energy calculation: sum of hourly averages  
+                total_kwh = hourly_totals.sum() if len(hourly_totals) > 0 else 0
+                peak_kw = hourly_totals.max() if len(hourly_totals) > 0 else 0
+                avg_kw = hourly_totals.mean() if len(hourly_totals) > 0 else 0
+                capacity_factor = min(1.0, peak_kw / POST_UPGRADE_NOMINAL_CAPACITY) if POST_UPGRADE_NOMINAL_CAPACITY > 0 else 0
+                
                 daily_stats.append({
                     'date': date,
-                    'total_kwh': hourly_totals.mean() * len(hourly_totals),  # Simplified energy calc
-                    'peak_kw': hourly_totals.max(),
-                    'avg_kw': hourly_totals.mean(),
-                    'capacity_factor': hourly_totals.max() / POST_UPGRADE_NOMINAL_CAPACITY,
+                    'total_kwh': total_kwh,
+                    'peak_kw': peak_kw,
+                    'avg_kw': avg_kw,
+                    'capacity_factor': capacity_factor,
                     'operating_hours': len(hourly_totals[hourly_totals > 1.0])
                 })
         
@@ -232,17 +244,29 @@ class SolarSystemAnalyzer:
         legacy_daily_avg = legacy_stats['avg_daily_kwh']
         new_daily_avg = new_stats['avg_daily_kwh']
         
-        # Performance improvements
-        energy_improvement_pct = ((new_daily_avg - legacy_daily_avg) / legacy_daily_avg * 100) if legacy_daily_avg > 0 else 0
+        # Performance improvements with bounds checking
+        energy_improvement_pct = 0
+        if legacy_daily_avg > 0:
+            energy_improvement_pct = ((new_daily_avg - legacy_daily_avg) / legacy_daily_avg * 100)
+            # Cap unrealistic improvements at ±500%
+            energy_improvement_pct = max(-500, min(500, energy_improvement_pct))
         
         legacy_peak = legacy_stats['peak_system_kw']
         new_peak = new_stats['peak_system_kw']
-        peak_improvement_pct = ((new_peak - legacy_peak) / legacy_peak * 100) if legacy_peak > 0 else 0
+        peak_improvement_pct = 0
+        if legacy_peak > 0:
+            peak_improvement_pct = ((new_peak - legacy_peak) / legacy_peak * 100)
+            # Cap unrealistic improvements at ±500%
+            peak_improvement_pct = max(-500, min(500, peak_improvement_pct))
         
         # Capacity factor improvements
         legacy_cf = legacy_stats['avg_capacity_factor']
         new_cf = new_stats['avg_capacity_factor']
-        cf_improvement_pct = ((new_cf - legacy_cf) / legacy_cf * 100) if legacy_cf > 0 else 0
+        cf_improvement_pct = 0
+        if legacy_cf > 0:
+            cf_improvement_pct = ((new_cf - legacy_cf) / legacy_cf * 100)
+            # Cap unrealistic improvements at ±500%
+            cf_improvement_pct = max(-500, min(500, cf_improvement_pct))
         
         # Economic impact
         annual_energy_increase_kwh = energy_improvement_pct / 100 * legacy_stats['total_kwh'] * (365 / legacy_stats['total_days'])
@@ -347,8 +371,8 @@ class SolarSystemAnalyzer:
         
         # Legacy system data
         if legacy_stats and 'daily_data' in legacy_stats:
-            legacy_df = legacy_stats['daily_data']
-            legacy_df['date'] = pd.to_datetime(legacy_df['date'])
+            legacy_df = legacy_stats['daily_data'].copy()
+            legacy_df['date'] = pd.to_datetime(legacy_df['date']).dt.strftime('%Y-%m-%d')
             
             fig.add_trace(
                 go.Scatter(
@@ -376,8 +400,8 @@ class SolarSystemAnalyzer:
         
         # New system data
         if new_stats and 'daily_data' in new_stats:
-            new_df = new_stats['daily_data']
-            new_df['date'] = pd.to_datetime(new_df['date'])
+            new_df = new_stats['daily_data'].copy()
+            new_df['date'] = pd.to_datetime(new_df['date']).dt.strftime('%Y-%m-%d')
             
             fig.add_trace(
                 go.Scatter(
@@ -404,13 +428,26 @@ class SolarSystemAnalyzer:
             )
         
         # Add upgrade date line
-        fig.add_vline(
-            x=self.upgrade_date,
-            line_dash="dash",
-            line_color="orange",
-            annotation_text="System Upgrade",
-            annotation_position="top"
-        )
+        try:
+            upgrade_date_str = self.upgrade_date.strftime('%Y-%m-%d')
+            fig.add_vline(
+                x=upgrade_date_str,
+                line_dash="dash",
+                line_color="orange",
+                annotation_text="System Upgrade",
+                annotation_position="top"
+            )
+        except Exception:
+            # Fallback: add as shape if vline fails
+            fig.add_shape(
+                type="line",
+                x0=self.upgrade_date,
+                x1=self.upgrade_date,
+                y0=0,
+                y1=1,
+                yref="paper",
+                line=dict(color="orange", dash="dash", width=2)
+            )
         
         fig.update_layout(
             height=600,
