@@ -115,7 +115,7 @@ def create_simple_comparison(before_data, after_data):
     )
     
     fig.update_layout(height=500)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Power distribution comparison  
     st.subheader("📊 Power Distribution Comparison")
@@ -130,7 +130,7 @@ def create_simple_comparison(before_data, after_data):
     )
     
     fig2.update_layout(height=400)
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
     
     # Summary table
     st.subheader("📋 Statistical Summary")
