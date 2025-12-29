@@ -28,7 +28,7 @@ def load_old_system_data(file_path):
         df = pd.read_csv(file_path)
         df = df[df['entity_id'] == 'sensor.bottling_factory_monthkwhtotal'].copy()
         
-        df['timestamp'] = pd.to_datetime(df['last_changed'])
+        df['timestamp'] = pd.to_datetime(df['last_changed'], utc=True)
         df['cumulative_kwh'] = pd.to_numeric(df['state'], errors='coerce')
         
         # Remove invalid data
@@ -64,7 +64,7 @@ def load_old_system_data(file_path):
             df.loc[df['month'] == month_period, 'power_kw'] = month_data['power_kw']
         
         # Filter to pre-upgrade period
-        upgrade_date = pd.to_datetime('2025-11-01')
+        upgrade_date = pd.to_datetime('2025-11-01', utc=True)
         df = df[df['timestamp'] < upgrade_date]
         
         return df
@@ -88,7 +88,7 @@ def load_new_system_data(file_path):
         ]
         df = df[df['entity_id'].isin(inverter_entities)].copy()
         
-        df['timestamp'] = pd.to_datetime(df['last_changed'])
+        df['timestamp'] = pd.to_datetime(df['last_changed'], utc=True)
         df['power_kw'] = pd.to_numeric(df['state'], errors='coerce')
         
         # Remove invalid data
@@ -96,7 +96,7 @@ def load_new_system_data(file_path):
         df = df[df['power_kw'] >= 0]
         
         # Filter to post-upgrade period
-        upgrade_date = pd.to_datetime('2025-11-01')
+        upgrade_date = pd.to_datetime('2025-11-01', utc=True)
         df = df[df['timestamp'] >= upgrade_date]
         
         return df
