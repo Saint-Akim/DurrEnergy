@@ -1440,11 +1440,11 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab - COMPLETE DATA-DRIVEN VERSION
+    # Solar Performance Tab - SIMPLE BEFORE/AFTER COMPARISON
     with tab2:
         try:
-            from solar_performance_complete import render_complete_solar_analysis
-            render_complete_solar_analysis()
+            from solar_performance_simple import render_simple_solar_comparison
+            render_simple_solar_comparison()
         except ImportError as e:
             st.error(f"❌ Solar performance module import failed: {e}")
             st.header("☀️ Solar Performance")
