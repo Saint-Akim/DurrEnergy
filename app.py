@@ -1445,10 +1445,16 @@ def main():
         try:
             from enhanced_solar_performance import render_enhanced_solar_performance
             render_enhanced_solar_performance()
-        except ImportError:
-            st.error("❌ Enhanced solar performance module not available")
+        except ImportError as e:
+            st.error(f"❌ Enhanced solar performance module import failed: {e}")
             st.header("☀️ Solar Performance")
             st.markdown("**Engineering analysis not available**")
+        except Exception as e:
+            st.error(f"❌ Enhanced solar performance execution failed: {e}")
+            st.header("☀️ Solar Performance")
+            st.markdown("**Engineering analysis not available**")
+            if st.button("Show Debug Info"):
+                st.exception(e)
             
         # OLD CODE REMOVED - All solar logic now handled in simple_solar_comparison module
     # Data Health panel and summary downloads in System Overview tab
