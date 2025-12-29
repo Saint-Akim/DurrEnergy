@@ -1440,21 +1440,19 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab - SIMPLE BEFORE/AFTER COMPARISON
+    # Solar Performance Analysis
     with tab2:
         try:
             from solar_performance_simple import render_simple_solar_comparison
             render_simple_solar_comparison()
         except ImportError as e:
-            st.error(f"❌ Solar performance module import failed: {e}")
+            st.error("❌ Solar performance module not available")
             st.header("☀️ Solar Performance")
-            st.markdown("**Analysis not available**")
-            st.exception(e)
+            st.markdown("**System analysis temporarily unavailable**")
         except Exception as e:
-            st.error(f"❌ Solar performance execution failed: {e}")
+            st.error("❌ Solar performance system error")
             st.header("☀️ Solar Performance")
-            st.markdown("**Analysis not available**") 
-            st.exception(e)
+            st.markdown("**System analysis temporarily unavailable**")
             
         # OLD CODE REMOVED - All solar logic now handled in simple_solar_comparison module
     # Data Health panel and summary downloads in System Overview tab
