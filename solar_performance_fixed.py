@@ -246,16 +246,26 @@ def calculate_system_metrics_fixed(df, system_label, is_multi_inverter=False):
             daily_metrics['peak_power_kw'] / nameplate_capacity * 100
         )
         
+        # Debug capacity utilization
+        st.info(f"   🔍 {system_label} Debug - Nameplate capacity: {nameplate_capacity.iloc[0]}kW")
+        st.info(f"   🔍 Max peak power: {daily_metrics['peak_power_kw'].max():.1f}kW") 
+        st.info(f"   🔍 Max capacity utilization: {daily_metrics['capacity_utilization_pct'].max():.1f}%")
+        
         daily_metrics['system'] = system_label
         
         # Apply realistic engineering bounds
+        before_bounds = len(daily_metrics)
         daily_metrics = daily_metrics[
             (daily_metrics['daily_kwh'] >= 0) & 
             (daily_metrics['daily_kwh'] <= 500) &
-            (daily_metrics['capacity_utilization_pct'] <= 100) &
+            (daily_metrics['capacity_utilization_pct'] <= 150) &  # Allow for some overload
             (daily_metrics['avg_power_kw'] >= 0) &
             (daily_metrics['peak_power_kw'] >= 0)
         ]
+        after_bounds = len(daily_metrics)
+        
+        if before_bounds > after_bounds:
+            st.warning(f"⚠️ {system_label}: Filtered out {before_bounds - after_bounds} records due to unrealistic values")
         
         st.success(f"✅ {system_label}: {len(daily_metrics)} daily metric records calculated")
         
@@ -307,9 +317,14 @@ def create_visualizations_fixed(old_data, new_data):
                 labels={'daily_kwh': 'Daily Energy (kWh)', 'date_str': 'Date'}
             )
             
-            # Add upgrade marker
-            fig1.add_vline(x="2025-11-01", line_dash="dash", 
-                          line_color="red", annotation_text="System Upgrade")
+            # Add upgrade marker (only if we have data spanning the upgrade date)
+            try:
+                dates = combined['date_str'].unique()
+                if any('2025-10' in d for d in dates) and any('2025-11' in d for d in dates):
+                    fig1.add_vline(x="2025-11-01", line_dash="dash", 
+                                  line_color="red", annotation_text="System Upgrade")
+            except Exception:
+                pass  # Skip upgrade marker if date format issues
             
             fig1.update_layout(height=400)
             st.plotly_chart(fig1, use_container_width=True)
@@ -327,8 +342,14 @@ def create_visualizations_fixed(old_data, new_data):
                 labels={'peak_power_kw': 'Peak Power (kW)', 'date_str': 'Date'}
             )
             
-            fig2.add_vline(x="2025-11-01", line_dash="dash", 
-                          line_color="red", annotation_text="System Upgrade")
+            # Add upgrade marker (only if we have data spanning the upgrade date)
+            try:
+                dates = combined['date_str'].unique()
+                if any('2025-10' in d for d in dates) and any('2025-11' in d for d in dates):
+                    fig2.add_vline(x="2025-11-01", line_dash="dash", 
+                                  line_color="red", annotation_text="System Upgrade")
+            except Exception:
+                pass  # Skip upgrade marker if date format issues
             
             fig2.update_layout(height=400)
             st.plotly_chart(fig2, use_container_width=True)
