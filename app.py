@@ -1440,19 +1440,19 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab - ENHANCED ENGINEERING ANALYSIS
+    # Solar Performance Tab - PRODUCTION REDESIGN
     with tab2:
         try:
-            from enhanced_solar_performance import render_enhanced_solar_performance
-            render_enhanced_solar_performance()
+            from solar_performance_redesign import render_solar_performance_analysis
+            render_solar_performance_analysis()
         except ImportError as e:
-            st.error(f"❌ Enhanced solar performance module import failed: {e}")
+            st.error(f"❌ Solar performance module import failed: {e}")
             st.header("☀️ Solar Performance")
-            st.markdown("**Engineering analysis not available**")
+            st.markdown("**Analysis not available**")
         except Exception as e:
-            st.error(f"❌ Enhanced solar performance execution failed: {e}")
+            st.error(f"❌ Solar performance execution failed: {e}")
             st.header("☀️ Solar Performance")
-            st.markdown("**Engineering analysis not available**")
+            st.markdown("**Analysis not available**")
             if st.button("Show Debug Info"):
                 st.exception(e)
             
