@@ -1440,17 +1440,359 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab - SIMPLE COMPARISON ONLY
+    # Solar Performance Tab (ENHANCED WITH 3-INVERTER SYSTEM)
     with tab2:
-        try:
-            from simple_solar_comparison import render_simple_solar_comparison
-            render_simple_solar_comparison()
-        except ImportError:
-            st.error("❌ Simple solar comparison module not available")
-            st.header("☀️ Solar Performance")
-            st.markdown("**Basic solar data display**")
+        st.header("☀️ Solar Performance")
+        st.markdown("**3-Inverter system monitoring with capacity analysis**")
+        
+        if not daily_solar.empty and solar_stats:
+            # Enhanced solar metrics
+            col1, col2, col3, col4 = st.columns(4)
             
-        # OLD CODE REMOVED - All solar logic now handled in simple_solar_comparison module
+            with col1:
+                render_clean_metric(
+                    "Total Generation",
+                    f"{solar_stats['total_generation_kwh']:,.0f} kWh",
+                    f"💰 Value: R{solar_stats['total_value_rands']:,.0f}",
+                    "green", "☀️",
+                    f"System upgrade: {solar_stats.get('system_upgrade_improvement', 'Standard')}",
+                    solar_stats.get('generation_trend', [])
+                )
+            
+            with col2:
+                system_type = solar_stats.get('system_type', 'Standard System')
+                new_inverters = solar_stats.get('new_inverters_added', 0)
+                improvement = solar_stats.get('capacity_improvement_percent', 0)
+                
+                render_clean_metric(
+                    "System Upgrade",
+                    f"{new_inverters} New Inverters" if new_inverters > 0 else f"{solar_stats.get('average_inverter_count', 0):.0f} Inverters",
+                    f"🚀 Improvement: +{improvement:.1f}%" if improvement > 0 else f"⚡ Peak: {solar_stats['peak_system_power_kw']:.1f} kW",
+                    "yellow", "🔌",
+                    f"{system_type} • Fronius removed" if solar_stats.get('fronius_removed') else "Enhanced configuration"
+                )
+            
+            with col3:
+                render_clean_metric(
+                    "Performance Factor",
+                    f"{solar_stats['average_capacity_factor']:.1f}%",
+                    f"🏆 Best day: {solar_stats.get('best_day_kwh', 0):.0f} kWh",
+                    "cyan", "📊",
+                    "System efficiency rating"
+                )
+            
+            with col4:
+                render_clean_metric(
+                    "Carbon Offset",
+                    f"{solar_stats['carbon_offset_kg']:,.0f} kg",
+                    "🌱 CO₂ avoided",
+                    "green", "🌍",
+                    "Environmental impact"
+                )
+            
+            # Enhanced solar charts (POSITIVE VALUES ONLY)
+            st.markdown("### 📈 Solar Performance Analysis (Enhanced System)")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig3, df3 = create_ultra_interactive_chart(
+                    daily_solar, 'date', 'total_kwh',
+                    'Daily Solar Generation (3-Inverter System)', '#10b981', 'area',
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
+                )
+                if df3 is not None:
+                    st.download_button("⬇️ Download Chart Data (Solar Daily)", df3.to_csv(index=False).encode('utf-8'), file_name="solar_daily_chart.csv", mime="text/csv", key="dl_chart_solar_daily")
+            
+            with col2:
+                fig4, df4 = create_ultra_interactive_chart(
+                    daily_solar, 'date', 'peak_kw',
+                    'Daily Peak Power Output', '#f59e0b', 'line',
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
+                )
+                if df4 is not None:
+                    st.download_button("⬇️ Download Chart Data (Peak Power)", df4.to_csv(index=False).encode('utf-8'), file_name="peak_power_chart.csv", mime="text/csv", key="dl_chart_peak_power")
+            
+            # System improvement analysis
+            if solar_stats.get('system_type') == '3-Inverter Enhanced System':
+                st.markdown("### 🚀 System Upgrade Impact Analysis")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    render_clean_metric(
+                        "System Upgrade",
+                        "✅ Complete",
+                        f"🔄 Fronius removed • +2 inverters",
+                        "green", "🔧",
+                        "Enhanced 3-inverter configuration"
+                    )
+                
+                with col2:
+                    monthly_savings = solar_stats.get('estimated_monthly_savings', 0)
+                    render_clean_metric(
+                        "Monthly Value",
+                        f"R {monthly_savings:,.0f}",
+                        f"💰 Improved generation capacity",
+                        "green", "💎",
+                        "Enhanced energy production value"
+                    )
+                
+                with col3:
+                    improvement = solar_stats.get('capacity_improvement_percent', 0)
+                    render_clean_metric(
+                        "Performance Gain",
+                        f"+{improvement:.1f}%",
+                        "📈 Capacity improvement",
+                        "cyan", "📊",
+                        "Compared to previous system"
+                    )
+                
+                # Show upgrade benefits
+                st.markdown("### 💡 Upgrade Benefits Analysis")
+                
+                benefits = {
+                    'System Reliability': 'Removed Fronius inverter • Enhanced stability',
+                    'Capacity Increase': f'+{improvement:.1f}% peak power improvement',
+                    'Energy Production': f'Estimated +R{monthly_savings*12:,.0f} annual value',
+                    'Maintenance': 'Simplified 3-inverter configuration',
+                    'Performance': f'Best day: {solar_stats.get("best_day_kwh", 0):.0f} kWh generation'
+                }
+                
+                for benefit, description in benefits.items():
+                    st.markdown(f"**✅ {benefit}**: {description}")
+            
+            # Individual inverter performance (if multiple inverters detected)
+            if not inverter_performance.empty and len(inverter_performance) > 1:
+                st.markdown("### 🔌 Individual Inverter Performance")
+                
+                inverter_summary = pd.DataFrame(inverter_performance)
+                if 'inverter' in inverter_summary.columns and 'total_kwh' in inverter_summary.columns:
+                    inverter_totals = inverter_summary.groupby('inverter')['total_kwh'].sum().reset_index()
+                    
+                    create_ultra_interactive_chart(
+                        inverter_totals, 'inverter', 'total_kwh',
+                        'Individual Inverter Performance Comparison', '#8b5cf6', 'bar',
+                        height=350, enable_zoom=True, selection_mode=selection_mode
+                    )
+        else:
+
+            
+            # ===================================================================
+            # ENHANCED SOLAR ANALYSIS - NEW SECTIONS
+            # ===================================================================
+            
+            # System Comparison Analysis (Legacy vs New)
+            st.markdown("---")
+            st.markdown("### 📊 System Comparison Analysis")
+            
+            # POWER-FOCUSED ANALYSIS (Main focus: Power capacity and generation patterns)
+            st.info("🔧 **Focus: Power Analysis** - Analyzing system power capacity, peak performance, and generation patterns")
+            
+            try:
+                # Analyze legacy system (automatically uses previous_inverter_system.csv)
+                legacy_daily, legacy_stats = analyze_legacy_solar_system()
+                
+                # Analyze new system
+                new_daily, new_stats, new_combined = analyze_new_3inverter_system(all_data['solar'])
+                
+                # Compare systems
+                if legacy_stats and new_stats:
+                    comparison = compare_solar_systems(legacy_stats, new_stats)
+                    
+                    st.markdown("#### Legacy (Fronius + Goodwe) vs New (3x Goodwe)")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        render_clean_metric(
+                            "Peak Power Capacity",
+                            f"{comparison['new_peak_kw']:.1f} kW",
+                            f"↗️ +{comparison['peak_capacity_improvement_pct']:.1f}% vs legacy",
+                            "green", "⚡",
+                            f"Legacy: {comparison['legacy_peak_kw']:.1f} kW"
+                        )
+                    
+                    with col2:
+                        render_clean_metric(
+                            "Avg Power Output",
+                            f"{comparison['new_avg_daily']/24:.1f} kW avg",
+                            f"↗️ +{comparison['daily_generation_improvement_pct']:.1f}% vs legacy",
+                            "green", "☀️",
+                            f"Legacy: {comparison['legacy_avg_daily']/24:.1f} kW avg"
+                        )
+                    
+                    with col3:
+                        render_clean_metric(
+                            "System Upgrade",
+                            "Complete ✅",
+                            comparison['system_upgrade'],
+                            "cyan", "🔧",
+                            comparison['recommendation']
+                        )
+                    
+                    # Show comparison note
+                    st.info(f"ℹ️ **Note:** {comparison['seasonal_note']}")
+                    
+            except Exception as e:
+                st.error(f"⚠️ **System Comparison Error:** {str(e)}")
+                st.code(f"Debug info: Check if previous_inverter_system.csv exists and is readable")
+                import traceback
+                st.code(traceback.format_exc())
+            
+            # Hourly POWER Patterns (Focus: Power output by hour)
+            st.markdown("---")
+            st.markdown("### 🕐 Hourly Power Generation Patterns")
+            
+            if not all_data['solar'].empty:
+                st.info("📊 **Power Focus:** Analyzing average power output patterns throughout the day")
+                try:
+                    hourly_pattern = calculate_hourly_generation_pattern(all_data['solar'])
+                    
+                    if not hourly_pattern.empty:
+                        # Create hourly pattern chart
+                        fig_hourly = go.Figure()
+                        
+                        fig_hourly.add_trace(go.Bar(
+                            x=hourly_pattern['hour'],
+                            y=hourly_pattern['avg_power_kw'],
+                            name='Average Power',
+                            marker=dict(
+                                color=['#10b981' if is_peak else '#3b82f6' 
+                                       for is_peak in hourly_pattern['is_peak']],
+                                opacity=0.8
+                            ),
+                            hovertemplate="<b>%{x}:00</b><br>Avg: %{y:.1f} kW<extra></extra>"
+                        ))
+                        
+                        fig_hourly.update_layout(
+                            title="🔋 Power Output Patterns Throughout the Day",
+                            xaxis_title="Hour of Day",
+                            yaxis_title="Average Power Output (kW)",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#e2e8f0'),
+                            height=400,
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig_hourly, use_container_width=True, key="hourly_pattern_chart")
+                        
+                        # Peak hours info
+                        peak_hours = hourly_pattern[hourly_pattern['is_peak']]['hour'].tolist()
+                        if peak_hours:
+                            st.success(f"🌟 Peak Generation Hours: {', '.join([f'{h:02d}:00' for h in peak_hours])}")
+                    
+                except Exception as e:
+                    st.error(f"⚠️ **Hourly Power Pattern Error:** {str(e)}")
+                    st.code("Debug: Check solar data format and availability")
+            
+            # Inverter POWER Performance Monitoring
+            st.markdown("---")
+            st.markdown("### 🔌 Inverter Power Performance Monitoring")
+            st.info("⚡ **Power Focus:** Monitoring individual inverter power output and capacity utilization")
+            
+            if not inverter_performance.empty:
+                try:
+                    alert = identify_underperforming_inverter(inverter_performance)
+                    
+                    if alert and alert.get('has_issue'):
+                        severity_color = {
+                            'HIGH': '🔴',
+                            'MEDIUM': '🟡',
+                            'LOW': '🟢'
+                        }
+                        
+                        st.warning(f"""
+                        {severity_color.get(alert['severity'], '⚠️')} **Performance Alert - {alert['severity']} Priority**
+                        
+                        - **Underperforming Inverter:** {alert['worst_inverter']}
+                        - **Capacity Factor:** {alert['worst_capacity_factor']:.1f}% (vs {alert['best_capacity_factor']:.1f}% best)
+                        - **Performance Gap:** {alert['performance_gap_pct']:.1f}%
+                        - **Recommendation:** {alert['recommendation']}
+                        """)
+                    else:
+                        st.success("✅ All inverters performing within acceptable range")
+                    
+                    # Show capacity factors for all inverters
+                    col1, col2, col3 = st.columns(3)
+                    inverter_names = inverter_performance['inverter'].unique()
+                    
+                    for idx, inv in enumerate(inverter_names[:3]):
+                        inv_data = inverter_performance[inverter_performance['inverter'] == inv]
+                        cf = (inv_data['avg_kw'].mean() / inv_data['peak_kw'].max() * 100) if inv_data['peak_kw'].max() > 0 else 0
+                        
+                        with [col1, col2, col3][idx]:
+                            render_clean_metric(
+                                f"Inverter {idx + 1}",
+                                f"{cf:.1f}%",
+                                "Capacity Factor",
+                                "green" if cf > 35 else "yellow", "⚡",
+                                inv.replace('sensor.', '').replace('_active_power', '')
+                            )
+                
+                except Exception as e:
+                    st.error(f"⚠️ **Inverter Monitoring Error:** {str(e)}")
+                    st.code("Debug: Check inverter performance data")
+            
+            # Power Generation Trends
+            st.markdown("---")
+            st.markdown("### 📈 Power Generation Trends & Analysis")
+            st.info("📈 **Power Focus:** Tracking power generation trends and identifying performance patterns")
+            
+            if not daily_solar.empty and len(daily_solar) >= 7:
+                try:
+                    trends = calculate_generation_trends(daily_solar, window=7)
+                    
+                    if not trends.empty:
+                        # Create trend chart
+                        fig_trend = go.Figure()
+                        
+                        fig_trend.add_trace(go.Scatter(
+                            x=trends['date'],
+                            y=trends['total_kwh'],
+                            mode='lines+markers',
+                            name='Daily Generation',
+                            line=dict(color='#3b82f6', width=2),
+                            marker=dict(size=6)
+                        ))
+                        
+                        fig_trend.add_trace(go.Scatter(
+                            x=trends['date'],
+                            y=trends['rolling_avg'],
+                            mode='lines',
+                            name='7-Day Average',
+                            line=dict(color='#10b981', width=3, dash='dash')
+                        ))
+                        
+                        fig_trend.update_layout(
+                            title="🔋 Power Generation Trends (7-Day Rolling Average)",
+                            xaxis_title="Date",
+                            yaxis_title="Daily Power Generation (kWh equivalent)",
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#e2e8f0'),
+                            height=400,
+                            hovermode='x unified'
+                        )
+                        
+                        st.plotly_chart(fig_trend, use_container_width=True, key="trend_chart")
+                        
+                        # Show trend direction
+                        latest_trend = trends['trend_direction'].iloc[-1] if len(trends) > 0 else 'STABLE'
+                        trend_icons = {
+                            'INCREASING': '📈 Generation is increasing',
+                            'DECREASING': '📉 Generation is decreasing',
+                            'STABLE': '➡️ Generation is stable'
+                        }
+                        st.info(trend_icons.get(latest_trend, 'Trend analysis'))
+                
+                except Exception as e:
+                    st.error(f"⚠️ **Trend Analysis Error:** {str(e)}")
+                    st.code("Debug: Check daily solar data for trend calculation")
+            
+            st.info("📊 No solar data available for selected period")
+    
     # Data Health panel and summary downloads in System Overview tab
     with tab4:
         st.markdown("## 🩺 Data Health & System Overview")
