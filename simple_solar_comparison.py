@@ -13,10 +13,30 @@ import streamlit as st
 from datetime import datetime
 
 def load_and_clean_data(file_path, system_label):
-    """Load solar data and clean for visualization."""
+    """Load solar data and clean for visualization - Streamlit Cloud compatible."""
     try:
+        # Check if file exists first
+        import os
+        if not os.path.exists(file_path):
+            st.error(f"Data file not found: {file_path}")
+            return pd.DataFrame()
+            
         df = pd.read_csv(file_path)
-        df['timestamp'] = pd.to_datetime(df['last_changed'], errors='coerce')
+        
+        # Validate required columns exist
+        required_cols = ['entity_id', 'state', 'last_changed']
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            st.error(f"Missing required columns in {file_path}: {missing_cols}")
+            return pd.DataFrame()
+        
+        # Parse timestamps with explicit UTC handling for Streamlit Cloud
+        df['timestamp'] = pd.to_datetime(df['last_changed'], errors='coerce', utc=True)
+        
+        # Convert to naive datetime to avoid timezone issues on Streamlit Cloud
+        if df['timestamp'].dt.tz is not None:
+            df['timestamp'] = df['timestamp'].dt.tz_convert(None)
+        
         df['power_kw'] = pd.to_numeric(df['state'], errors='coerce')
         
         # Remove invalid data
@@ -24,9 +44,16 @@ def load_and_clean_data(file_path, system_label):
         df = df[df['power_kw'] >= 0]  # Remove negative values
         df['system'] = system_label
         
+        # Validate we have data after cleaning
+        if df.empty:
+            st.warning(f"No valid data found in {file_path} after cleaning")
+            return pd.DataFrame()
+        
         return df
     except Exception as e:
-        st.error(f"Error loading {file_path}: {e}")
+        st.error(f"Error loading {file_path}: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         return pd.DataFrame()
 
 def aggregate_daily_data(df):
@@ -36,9 +63,13 @@ def aggregate_daily_data(df):
     
     df['date'] = df['timestamp'].dt.date
     
-    # Proper solar data aggregation methodology
-    df['hour'] = df['timestamp'].dt.floor('h')
-    df['date'] = df['timestamp'].dt.date
+    # Proper solar data aggregation methodology - Streamlit Cloud compatible
+    try:
+        df['hour'] = df['timestamp'].dt.floor('h') 
+        df['date'] = df['timestamp'].dt.date
+    except Exception as e:
+        st.error(f"Error processing timestamps in aggregation: {e}")
+        return pd.DataFrame()
     
     # CORRECTED: Get realistic individual inverter averages first, then sum per hour
     # Step 1: Average each inverter's power readings per hour  
@@ -78,70 +109,113 @@ def aggregate_daily_data(df):
     return daily
 
 def create_comparison_charts(old_data, new_data):
-    """Create visualization charts for comparison."""
+    """Create visualization charts for comparison - Streamlit Cloud compatible."""
     
-    # Combine data
-    combined = pd.concat([old_data, new_data], ignore_index=True)
-    
-    if combined.empty:
-        st.error("No data available for visualization")
+    try:
+        # Combine data with validation
+        data_frames = []
+        if not old_data.empty:
+            data_frames.append(old_data)
+        if not new_data.empty:
+            data_frames.append(new_data)
+        
+        if not data_frames:
+            st.error("No data available for visualization")
+            return
+            
+        combined = pd.concat(data_frames, ignore_index=True)
+        
+        if combined.empty:
+            st.error("Combined data is empty after concatenation")
+            return
+            
+    except Exception as e:
+        st.error(f"Error combining data for charts: {e}")
         return
     
     # Chart 1: Daily Energy Generation Timeline
-    fig1 = px.line(
-        combined, 
-        x='date', 
-        y='total_kwh',
-        color='system',
-        title='Daily Energy Generation - Old vs New System',
-        labels={'total_kwh': 'Daily Energy (kWh)', 'date': 'Date'}
-    )
     try:
-        fig1.add_vline(x="2025-11-01", line_dash="dash", annotation_text="System Change")
-    except Exception:
-        # Fallback: add as vertical shape
-        fig1.add_shape(type="line", x0="2025-11-01", x1="2025-11-01", y0=0, y1=1, yref="paper", 
-                      line=dict(color="orange", dash="dash"))
-    st.plotly_chart(fig1, use_container_width=True)
+        # Ensure date column is properly formatted for Plotly
+        combined['date_str'] = combined['date'].astype(str)
+        
+        fig1 = px.line(
+            combined, 
+            x='date_str', 
+            y='total_kwh',
+            color='system',
+            title='Daily Energy Generation - Old vs New System',
+            labels={'total_kwh': 'Daily Energy (kWh)', 'date_str': 'Date'}
+        )
+        
+        # Add system change marker with error handling
+        try:
+            fig1.add_vline(x="2025-11-01", line_dash="dash", annotation_text="System Change")
+        except Exception:
+            # Fallback: add as vertical shape
+            fig1.add_shape(type="line", x0="2025-11-01", x1="2025-11-01", y0=0, y1=1, yref="paper", 
+                          line=dict(color="orange", dash="dash"))
+        
+        st.plotly_chart(fig1, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error creating energy timeline chart: {e}")
+        # Fallback: show basic data table
+        st.subheader("Daily Energy Data")
+        st.dataframe(combined[['date', 'system', 'total_kwh']].head(10))
     
     # Chart 2: Daily Peak Power Timeline
-    fig2 = px.line(
-        combined, 
-        x='date', 
-        y='peak_kw',
-        color='system',
-        title='Daily Peak Power - Old vs New System',
-        labels={'peak_kw': 'Peak Power (kW)', 'date': 'Date'}
-    )
     try:
-        fig2.add_vline(x="2025-11-01", line_dash="dash", annotation_text="System Change")
-    except Exception:
-        # Fallback: add as vertical shape  
-        fig2.add_shape(type="line", x0="2025-11-01", x1="2025-11-01", y0=0, y1=1, yref="paper",
-                      line=dict(color="orange", dash="dash"))
-    st.plotly_chart(fig2, use_container_width=True)
+        fig2 = px.line(
+            combined, 
+            x='date_str', 
+            y='peak_kw',
+            color='system',
+            title='Daily Peak Power - Old vs New System',
+            labels={'peak_kw': 'Peak Power (kW)', 'date_str': 'Date'}
+        )
+        
+        try:
+            fig2.add_vline(x="2025-11-01", line_dash="dash", annotation_text="System Change")
+        except Exception:
+            # Fallback: add as vertical shape  
+            fig2.add_shape(type="line", x0="2025-11-01", x1="2025-11-01", y0=0, y1=1, yref="paper",
+                          line=dict(color="orange", dash="dash"))
+        
+        st.plotly_chart(fig2, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error creating peak power chart: {e}")
+        st.subheader("Peak Power Data")
+        st.dataframe(combined[['date', 'system', 'peak_kw']].head(10))
     
     # Chart 3: Box Plot Comparison
-    fig3 = make_subplots(
-        rows=1, cols=2,
-        subplot_titles=['Energy Distribution', 'Peak Power Distribution']
-    )
-    
-    for system in combined['system'].unique():
-        system_data = combined[combined['system'] == system]
-        
-        fig3.add_trace(
-            go.Box(y=system_data['total_kwh'], name=f'{system} Energy', boxpoints='outliers'),
-            row=1, col=1
+    try:
+        fig3 = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=['Energy Distribution', 'Peak Power Distribution']
         )
         
-        fig3.add_trace(
-            go.Box(y=system_data['peak_kw'], name=f'{system} Peak Power', boxpoints='outliers'),
-            row=1, col=2
-        )
-    
-    fig3.update_layout(title_text="Performance Distribution Comparison", height=400)
-    st.plotly_chart(fig3, use_container_width=True)
+        for system in combined['system'].unique():
+            system_data = combined[combined['system'] == system]
+            
+            fig3.add_trace(
+                go.Box(y=system_data['total_kwh'], name=f'{system} Energy', boxpoints='outliers'),
+                row=1, col=1
+            )
+            
+            fig3.add_trace(
+                go.Box(y=system_data['peak_kw'], name=f'{system} Peak Power', boxpoints='outliers'),
+                row=1, col=2
+            )
+        
+        fig3.update_layout(title_text="Performance Distribution Comparison", height=400)
+        st.plotly_chart(fig3, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error creating distribution charts: {e}")
+        st.subheader("System Performance Summary")
+        summary_stats = combined.groupby('system')[['total_kwh', 'peak_kw']].agg(['mean', 'max', 'min']).round(2)
+        st.dataframe(summary_stats)
     
     # Chart 4: Hourly Generation Patterns
     if not combined.empty:
