@@ -1440,21 +1440,22 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Analysis
+    # Solar Performance Analysis - REDESIGNED 2025-12-29
     with tab2:
         try:
-            from solar_performance_simple import render_simple_solar_comparison
-            render_simple_solar_comparison()
+            from solar_tab_redesigned import render_solar_performance_tab
+            render_solar_performance_tab()
         except ImportError as e:
-            st.error("❌ Solar performance module not available")
+            st.error(f"❌ Solar performance module not available: {e}")
             st.header("☀️ Solar Performance")
             st.markdown("**System analysis temporarily unavailable**")
+            st.markdown("Please ensure solar_tab_redesigned.py and solar_analysis_production.py are present.")
         except Exception as e:
-            st.error("❌ Solar performance system error")
+            st.error(f"❌ Solar performance system error: {e}")
             st.header("☀️ Solar Performance")
             st.markdown("**System analysis temporarily unavailable**")
-            
-        # OLD CODE REMOVED - All solar logic now handled in simple_solar_comparison module
+            import traceback
+            st.code(traceback.format_exc())
     # Data Health panel and summary downloads in System Overview tab
     with tab4:
         st.markdown("## 🩺 Data Health & System Overview")
