@@ -393,9 +393,9 @@ def render_solar_performance_analysis():
     st.title("☀️ Solar Performance Analysis")
     st.markdown("**Engineering assessment of November 2025 inverter upgrade**")
     
-    # Data file paths
-    old_system_path = "/Users/husseinakim/Desktop/DurrEnergyApp/FACTORY ELEC.csv"
-    new_system_path = "/Users/husseinakim/Desktop/DurrEnergyApp/New_inverter.csv"
+    # Data file paths (use relative paths for Streamlit compatibility)
+    old_system_path = "FACTORY ELEC.csv"
+    new_system_path = "New_inverter.csv"
     
     # Load and process data
     with st.spinner("Loading and analyzing solar performance data..."):
