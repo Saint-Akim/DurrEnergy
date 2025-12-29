@@ -10,10 +10,18 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 def load_before_upgrade_data():
-    """Load pre-upgrade system data (kW only)"""
+    """Load pre-upgrade OLD inverter system data (kW only)"""
     try:
+        st.info("📊 Loading OLD inverter system data...")
+        
         # Use the previous inverter system file with real kW data
         df = pd.read_csv('previous inverter system.csv')
+        
+        st.info(f"   📁 Loaded {len(df):,} records from previous inverter system.csv")
+        
+        # Show available entities for debugging
+        entities = df['entity_id'].unique()
+        st.info(f"   🔍 Available entities: {entities[:5]}...")
         
         # Filter for power sensors only
         power_sensors = [
@@ -21,6 +29,8 @@ def load_before_upgrade_data():
             'sensor.goodwe_total_pv_power'
         ]
         df = df[df['entity_id'].isin(power_sensors)].copy()
+        
+        st.info(f"   ⚡ Filtered to power sensors: {len(df):,} records")
         
         # Parse data
         df['timestamp'] = pd.to_datetime(df['last_changed'], utc=True)
@@ -30,21 +40,44 @@ def load_before_upgrade_data():
         df = df.dropna(subset=['power_kw'])
         df = df[df['power_kw'] >= 0]
         
-        # Aggregate both sensors (Fronius + GoodWe)
+        st.info(f"   🧹 After cleaning: {len(df):,} valid records")
+        
+        # Show breakdown by sensor
+        for sensor in power_sensors:
+            sensor_data = df[df['entity_id'] == sensor]
+            if not sensor_data.empty:
+                avg_power = sensor_data['power_kw'].mean()
+                st.info(f"   📊 {sensor}: {len(sensor_data):,} records, avg {avg_power:.1f}kW")
+        
+        # Aggregate both sensors (Fronius + GoodWe) by hour
         df['hour'] = df['timestamp'].dt.floor('H')
         hourly_total = df.groupby('hour')['power_kw'].sum().reset_index()
-        hourly_total['system'] = 'Before Upgrade (4 Inverters)'
+        hourly_total['system'] = 'OLD System (Previous Inverters)'
+        
+        # Date range
+        if not hourly_total.empty:
+            date_range = f"{hourly_total['hour'].min().date()} → {hourly_total['hour'].max().date()}"
+            st.success(f"   ✅ OLD system hourly data: {len(hourly_total):,} hours ({date_range})")
         
         return hourly_total
         
     except Exception as e:
-        st.error(f"Error loading before data: {e}")
+        st.error(f"❌ Error loading OLD inverter system data: {e}")
+        st.exception(e)
         return pd.DataFrame()
 
 def load_after_upgrade_data():
-    """Load post-upgrade system data (kW only)"""
+    """Load post-upgrade NEW inverter system data (kW only)"""
     try:
+        st.info("📊 Loading NEW inverter system data...")
+        
         df = pd.read_csv('New_inverter.csv')
+        
+        st.info(f"   📁 Loaded {len(df):,} records from New_inverter.csv")
+        
+        # Show available entities for debugging
+        entities = df['entity_id'].unique()
+        st.info(f"   🔍 Available entities: {entities[:5]}...")
         
         # Filter for the 3 new inverters
         new_inverters = [
@@ -54,6 +87,8 @@ def load_after_upgrade_data():
         ]
         df = df[df['entity_id'].isin(new_inverters)].copy()
         
+        st.info(f"   ⚡ Filtered to new inverters: {len(df):,} records")
+        
         # Parse data
         df['timestamp'] = pd.to_datetime(df['last_changed'], utc=True)
         df['power_kw'] = pd.to_numeric(df['state'], errors='coerce')
@@ -62,15 +97,31 @@ def load_after_upgrade_data():
         df = df.dropna(subset=['power_kw'])
         df = df[df['power_kw'] >= 0]
         
-        # Aggregate all 3 inverters
+        st.info(f"   🧹 After cleaning: {len(df):,} valid records")
+        
+        # Show breakdown by inverter
+        for inverter in new_inverters:
+            inverter_data = df[df['entity_id'] == inverter]
+            if not inverter_data.empty:
+                avg_power = inverter_data['power_kw'].mean()
+                max_power = inverter_data['power_kw'].max()
+                st.info(f"   📊 {inverter}: {len(inverter_data):,} records, avg {avg_power:.1f}kW, max {max_power:.1f}kW")
+        
+        # Aggregate all 3 inverters by hour
         df['hour'] = df['timestamp'].dt.floor('H')
         hourly_total = df.groupby('hour')['power_kw'].sum().reset_index()
-        hourly_total['system'] = 'After Upgrade (3 Inverters)'
+        hourly_total['system'] = 'NEW System (3 New Inverters)'
+        
+        # Date range
+        if not hourly_total.empty:
+            date_range = f"{hourly_total['hour'].min().date()} → {hourly_total['hour'].max().date()}"
+            st.success(f"   ✅ NEW system hourly data: {len(hourly_total):,} hours ({date_range})")
         
         return hourly_total
         
     except Exception as e:
-        st.error(f"Error loading after data: {e}")
+        st.error(f"❌ Error loading NEW inverter system data: {e}")
+        st.exception(e)
         return pd.DataFrame()
 
 def create_simple_comparison(before_data, after_data):
@@ -146,7 +197,9 @@ def render_simple_solar_comparison():
     """Main function for simple solar comparison"""
     
     st.title("☀️ Simple Solar Performance Comparison")
-    st.markdown("**Direct before/after upgrade comparison - Power Output (kW) Only**")
+    st.markdown("**OLD vs NEW Inverter System Comparison - Power Output (kW) Only**")
+    st.markdown("🔄 **OLD System**: previous inverter system.csv (Fronius + GoodWe)")
+    st.markdown("⚡ **NEW System**: New_inverter.csv (3 New GoodWe Inverters)")
     
     # Load data
     with st.spinner("Loading solar performance data..."):
