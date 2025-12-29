@@ -1440,15 +1440,15 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Tab - SIMPLE COMPARISON ONLY
+    # Solar Performance Tab - ENHANCED ENGINEERING ANALYSIS
     with tab2:
         try:
-            from simple_solar_comparison import render_simple_solar_comparison
-            render_simple_solar_comparison()
+            from enhanced_solar_performance import render_enhanced_solar_performance
+            render_enhanced_solar_performance()
         except ImportError:
-            st.error("❌ Simple solar comparison module not available")
+            st.error("❌ Enhanced solar performance module not available")
             st.header("☀️ Solar Performance")
-            st.markdown("**Basic solar data display**")
+            st.markdown("**Engineering analysis not available**")
             
         # OLD CODE REMOVED - All solar logic now handled in simple_solar_comparison module
     # Data Health panel and summary downloads in System Overview tab
