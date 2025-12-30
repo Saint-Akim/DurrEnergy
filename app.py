@@ -3213,96 +3213,17 @@ def main():
             st.info("📊 No generator data available for selected period")
     
     # Solar Performance Analysis - SIMPLIFIED
+    # Solar Performance Tab - SIMPLE COMPARISON ONLY
     with tab2:
-        st.header("☀️ Solar Performance")
-        st.markdown("**Solar system monitoring**")
-        
-        # Simple solar display without the detailed comparison
-        if not daily_solar.empty:
-            st.markdown("### 📊 Current Solar Performance")
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                render_clean_metric(
-                    "Total Generation",
-                    f"{solar_stats.get('total_generation_kwh', 0):,.1f} kWh",
-                    f"📊 Period: {period_days} days",
-                    "green", "☀️"
-                )
-            
-            with col2:
-                render_clean_metric(
-                    "Average Daily",
-                    f"{solar_stats.get('average_daily_kwh', 0):,.1f} kWh",
-                    f"⚡ Per day average",
-                    "blue", "📈"
-                )
-            
-            with col3:
-                render_clean_metric(
-                    "Peak Power",
-                    f"{solar_stats.get('peak_system_power_kw', 0):.1f} kW",
-                    f"🔋 Maximum output",
-                    "purple", "⚡"
-                )
-            
-            # Simple daily generation chart
-            if not daily_solar.empty:
-                st.markdown("### 📈 Daily Solar Generation")
-                
-                fig, df_chart = create_ultra_interactive_chart(
-                    daily_solar, 'date', 'total_kwh',
-                    'Daily Solar Generation (kWh)', '#10b981', 'area',
-                    height=400, enable_zoom=True, selection_mode=selection_mode
-                )
-        else:
+        try:
+            from simple_solar_comparison import render_simple_solar_comparison
+            render_simple_solar_comparison()
+        except ImportError:
+            st.error("❌ Simple solar comparison module not available")
+            st.header("☀️ Solar Performance")
+            st.markdown("**Basic solar data display**")
             st.info("📊 No solar data available for selected period")
-    # Data Health panel and summary downloads in System Overview tab
-    with tab4:
-        st.markdown("## 🩺 Data Health & System Overview")
 
-        # Quick health checks
-        def df_health(df, name):
-            if df is None or df.empty:
-                return f"❌ {name}: missing/empty"
-            rows, cols = df.shape
-            return f"✅ {name}: {rows} rows, {cols} cols"
-
-        st.markdown("### Data Sources")
-        sources = {
-            'Generator': daily_fuel,
-            'Fuel Purchases': fuel_purchases,
-            'Solar Daily': daily_solar,
-            'Solar Hourly': hourly_solar,
-            'Inverter Performance': inverter_performance,
-        }
-        for k, v in sources.items():
-            st.write(df_health(v, k))
-
-        # Recent dates present
-        recent_info = []
-        for name, df in [('Generator', daily_fuel), ('Solar', daily_solar)]:
-            if not df.empty and 'date' in df.columns:
-                recent_info.append(f"{name}: {pd.to_datetime(df['date']).max().date()}")
-        if recent_info:
-            st.info("Latest data points — " + " • ".join(recent_info))
-
-        # Downloads
-        with st.expander("⬇️ Export all analytics as CSVs", expanded=False):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.download_button("Generator Daily CSV", daily_fuel.to_csv(index=False).encode('utf-8') if not daily_fuel.empty else b"", file_name="generator_daily.csv", mime="text/csv", key="dl_generator_daily_bottom", disabled=daily_fuel.empty)
-                st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_bottom", disabled=fuel_purchases.empty)
-            with c2:
-                st.download_button("Solar Daily CSV", daily_solar.to_csv(index=False).encode('utf-8') if not daily_solar.empty else b"", file_name="solar_daily.csv", mime="text/csv", key="dl_solar_daily_bottom", disabled=daily_solar.empty)
-                st.download_button("Hourly Solar CSV", hourly_solar.to_csv(index=False).encode('utf-8') if not hourly_solar.empty else b"", file_name="solar_hourly.csv", mime="text/csv", key="dl_solar_hourly_bottom", disabled=hourly_solar.empty)
-            with c3:
-                st.download_button("Inverter Performance CSV", inverter_performance.to_csv(index=False).encode('utf-8') if not inverter_performance.empty else b"", file_name="inverter_performance.csv", mime="text/csv", key="dl_inverter_perf_bottom", disabled=inverter_performance.empty)
-
-        st.markdown("---")
-
-    # Factory Optimization Tab
     with tab3:
         st.markdown("## 🏭 Factory Energy Optimization")
         st.info("📊 Factory energy analysis module ready for implementation")
