@@ -1515,7 +1515,7 @@ def render_generator_efficiency_section(gen_df, start_date, end_date):
     avg_eff = efficiency_df['state'].mean()
     max_eff = efficiency_df['state'].max()
     best_eff_date = efficiency_df.loc[efficiency_df['state'].idxmax(), 'last_changed']
-    days_since_best = (datetime.now() - best_eff_date).days
+    days_since_best = (pd.Timestamp.now() - best_eff_date).days
     
     # Display metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -2602,7 +2602,7 @@ def render_data_quality_dashboard():
             if 'last_changed' in gen_df.columns:
                 gen_df['last_changed'] = pd.to_datetime(gen_df['last_changed'], errors='coerce')
                 latest_data = gen_df['last_changed'].max()
-                hours_old = (datetime.now() - latest_data).total_seconds() / 3600
+                hours_old = (pd.Timestamp.now() - latest_data).total_seconds() / 3600
                 
                 if hours_old < 24:
                     freshness = "Live"
