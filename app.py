@@ -1477,594 +1477,6 @@ def create_ultra_interactive_chart(df, x_col, y_col, title, color="#3b82f6", cha
 # MAIN APPLICATION (WITH ALL IMPROVEMENTS)
 # ==============================================================================
 
-def main():
-    """Ultra-modern improved main application - ENHANCED UI VERSION"""
-    
-    # Enhanced header with status badges
-    col_title, col_status = st.columns([3, 1])
-    
-    with col_title:
-        st.title("🏭 Durr Bottling Energy Dashboard")
-        st.markdown("**Track your energy usage and costs in simple, easy-to-understand charts**")
-    
-    with col_status:
-        render_status_badge("System Live", "live", "🟢")
-        st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
-    
-    # Welcome message for non-technical users
-    st.info("""
-        👋 **Welcome!** This dashboard shows you:
-        - 🔥 **Diesel Usage** - How much fuel your generator uses and costs
-        - ☀️ **Solar Power** - Free electricity from your solar panels
-        - ⚡ **Factory Electricity** - How much power your factory consumes
-        - 💰 **Costs & Savings** - Where your money goes and how you can save
-    """)
-    
-    st.markdown("---")
-    
-    # Quick Action Panel
-    with st.expander("⚡ Quick Actions", expanded=False):
-        render_quick_action_panel()
-    
-    # Silent data loading
-    all_data = load_all_energy_data_silent()
-
-    # Column mapping helper
-    def apply_column_mapping(df, mapping_key):
-        if df is None or df.empty:
-            return df
-        expected = ["last_changed", "entity_id", "state"]
-        missing = [c for c in expected if c not in df.columns]
-        if not missing:
-            return df
-        # Show mapping UI in sidebar
-        with st.sidebar.expander(f"Map columns for {mapping_key}", expanded=False):
-            st.write("Select which columns correspond to the expected fields:")
-            selections = {}
-            for target in missing:
-                options = [c for c in df.columns]
-                if options:
-                    selections[target] = st.selectbox(f"{mapping_key} → {target}", options, key=f"map_{mapping_key}_{target}")
-            if selections:
-                df = df.rename(columns=selections)
-        return df
-
-    # Apply mapping to generator and solar datasets if needed
-    all_data['generator'] = apply_column_mapping(all_data.get('generator', pd.DataFrame()), 'Generator')
-    all_data['solar'] = apply_column_mapping(all_data.get('solar', pd.DataFrame()), 'Solar')
-    
-    # Global date range selector
-    st.markdown("---")
-    start_date, end_date, period_days = create_date_range_selector("main_dashboard")
-    
-    # Ultra-modern sidebar
-    with st.sidebar:
-        st.markdown("### ⚡ Energy Control Center")
-        
-        # Data Manager: download/update data sources
-        with st.expander("🗂️ Data Manager (download/update data files)", expanded=False):
-            BASE = "https://raw.githubusercontent.com/Saint-Akim/Solar-performance/main/"
-            downloads = {
-                "New_inverter.csv": BASE + "New_inverter.csv",
-                "FACTORY ELEC.csv": BASE + "FACTORY%20ELEC.csv",
-                "Solar_Goodwe&Fronius-Jan.csv": BASE + "Solar_Goodwe%26Fronius-Jan.csv",
-                "Solar_goodwe&Fronius_April.csv": BASE + "Solar_goodwe%26Fronius_April.csv",
-                "Solar_goodwe&Fronius_may.csv": BASE + "Solar_goodwe%26Fronius_may.csv",
-                "gen (2).csv": BASE + "gen%20%282%29.csv",
-                "gen (2).xlsx": BASE + "gen%20%282%29.xlsx",
-                "history (5).csv": BASE + "history%20%285%29.csv",
-                "history (5).xlsx": BASE + "history%20%285%29.xlsx",
-                "Durr bottling Generator filling.xlsx": BASE + "Durr%20bottling%20Generator%20filling.xlsx",
-                "September 2025.xlsx": BASE + "September%202025.xlsx",
-            }
-            dm_cols = st.columns(2)
-            for i, (fname, url) in enumerate(downloads.items()):
-                with dm_cols[i % 2]:
-                    if st.button(f"⬇️ {fname}", key=f"dm_{fname}"):
-                        try:
-                            import requests
-                            r = requests.get(url, timeout=30)
-                            if r.status_code == 200:
-                                with open(fname, "wb") as f:
-                                    f.write(r.content)
-                                st.success(f"Saved {fname}")
-                                st.cache_data.clear()
-                            else:
-                                st.warning(f"Could not fetch {fname}: {r.status_code}")
-                        except Exception as e:
-                            st.error(f"Download failed for {fname}: {e}")
-        
-        # Column Mapping UI (appears when needed)
-        st.markdown("### 🧭 Data Column Mapping")
-        st.caption("If your files use different column names, map them here.")
-        st.markdown("#### Enhanced v10.0 • Real-Time Intelligence")
-        st.markdown("---")
-        
-        # Enhanced preferences
-        st.markdown("### 🎛️ Dashboard Preferences")
-        
-        chart_theme = st.selectbox(
-            "Chart Theme",
-            ["Dark (Default)", "High Contrast", "Minimal", "Colorful"],
-            help="Choose your preferred chart styling"
-        )
-        
-        enable_animations = st.checkbox("Enable Animations", value=True, help="Smooth chart transitions")
-        show_sparklines = st.checkbox("Show Trend Sparklines", value=True, help="Mini charts in metrics")
-        selection_mode = st.selectbox(
-            "Selection Mode",
-            ["Box Select", "Lasso Select", "Pan", "Zoom"],
-            help="Choose how to interact with charts"
-        )
-        pricing_mode = st.selectbox(
-            "Fuel Pricing Mode",
-            ["nearest_prior", "monthly_average"],
-            index=0,
-            help="Nearest prior: Use closest purchase price per day (recommended). Monthly average: Use monthly mean price."
-        )
-        
-        st.markdown("---")
-        
-        # Quick actions with FIXED width
-        if st.button("🔄 Refresh Data", width='stretch'):
-            st.cache_data.clear()
-            st.rerun()
-        
-        if st.button("📧 Email Report", width='stretch'):
-            st.success("✅ Report sent to stakeholders")
-    
-    # Process data with selected date range
-    with st.spinner("Processing enhanced analytics..."):
-        # Enhanced fuel analysis with real pricing
-        daily_fuel, fuel_stats, fuel_purchases, tank_validation = calculate_enhanced_fuel_analysis(
-            all_data.get('generator', pd.DataFrame()),
-            all_data.get('fuel_history', pd.DataFrame()),
-            all_data.get('fuel_purchases', pd.DataFrame()),
-            all_data.get('generator_detailed', pd.DataFrame()),
-            start_date, end_date
-        )
-        
-        # Enhanced solar analysis with 3-inverter system
-        daily_solar, solar_stats, hourly_solar, inverter_performance = process_enhanced_solar_analysis(
-            all_data.get('solar', pd.DataFrame()),
-            start_date, end_date
-        )
-    
-    # Enhanced tabs with Data Quality tab
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🔋 Generator Fuel Analysis", 
-        "☀️ Solar Performance", 
-        "🏭 Factory Optimization",
-        "📊 System Overview",
-        "🩺 Data Quality"
-    ])
-    
-    # Generator Analysis Tab (ENHANCED WITH REAL PRICING)
-    with tab1:
-        st.header("🔋 Generator Fuel Analysis")
-        st.markdown("**Real-time fuel consumption monitoring with actual market pricing**")
-        
-        if not daily_fuel.empty and fuel_stats:
-            # Enhanced metrics with real pricing info
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                total_fuel = fuel_stats['total_fuel_liters']
-                render_clean_metric(
-                    "Total Fuel Consumed",
-                    f"{total_fuel:,.1f} L",
-                    f"📈 Real pricing used",
-                    "blue", "⛽",
-                    f"Period: {period_days} days • Market prices applied",
-                    fuel_stats.get('fuel_consumption_trend', [])
-                )
-                # Add business context badge
-                daily_avg = total_fuel / max(period_days, 1)
-                context_html = add_business_context_badge('fuel_daily_liters', daily_avg)
-                if context_html:
-                    st.markdown(context_html, unsafe_allow_html=True)
-            
-            with col2:
-                total_cost = fuel_stats['total_cost_rands']
-                render_clean_metric(
-                    "Total Fuel Cost",
-                    f"R {total_cost:,.0f}",
-                    f"💰 R{fuel_stats['average_cost_per_liter']:.2f}/L market avg",
-                    "red", "💸",
-                    "Based on actual purchase prices",
-                    fuel_stats.get('cost_trend', [])
-                )
-                # Add business context badge
-                daily_cost = total_cost / max(period_days, 1)
-                context_html = add_business_context_badge('fuel_cost_daily', daily_cost)
-                if context_html:
-                    st.markdown(context_html, unsafe_allow_html=True)
-            
-            with col3:
-                efficiency = fuel_stats.get('average_efficiency', 0)
-                render_clean_metric(
-                    "Generator Efficiency",
-                    f"{efficiency:.1f}%",
-                    f"⚡ Runtime: {fuel_stats.get('total_runtime_hours', 0):.0f}h",
-                    "green" if efficiency > 70 else "yellow", "⚡",
-                    "Performance rating"
-                )
-            
-            with col4:
-                render_clean_metric(
-                    "Daily Average",
-                    f"{fuel_stats.get('average_daily_fuel', 0):.1f} L/day",
-                    f"📅 Over {fuel_stats.get('period_days', 0)} days",
-                    "purple", "📈",
-                    "Consumption pattern"
-                )
-            
-            # Data downloads
-            with st.expander("⬇️ Download datasets", expanded=False):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.download_button("Daily Fuel CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="daily_fuel.csv", mime="text/csv", key="dl_daily_fuel_top")
-                with c2:
-                    st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_top", disabled=fuel_purchases.empty)
-                with c3:
-                    st.download_button("Runtime/Efficiency CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="fuel_runtime_efficiency.csv", mime="text/csv", key="dl_runtime_efficiency_top")
-
-            # Add new analysis sections BEFORE charts
-            st.markdown("---")
-            
-            # Generator Efficiency Section
-            render_generator_efficiency_section(
-                all_data.get('generator', pd.DataFrame()),
-                start_date, 
-                end_date
-            )
-            
-            st.markdown("---")
-            
-            # Runtime Analysis Section
-            render_runtime_analysis_section(
-                all_data.get('generator', pd.DataFrame()),
-                start_date,
-                end_date
-            )
-            
-            st.markdown("---")
-            
-            # Fuel Tank Analysis Section
-            render_fuel_tank_analysis_section(
-                all_data.get('generator', pd.DataFrame()),
-                all_data.get('fuel_history', pd.DataFrame()),
-                start_date,
-                end_date
-            )
-            
-            st.markdown("---")
-            
-            # Enhanced fuel analysis charts
-            st.markdown("### 📊 Fuel Usage Summary")
-            st.caption("Here's what your generator used during this time period")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig1, df1 = create_ultra_interactive_chart(
-                    daily_fuel, 'date', 'fuel_consumed_liters',
-                    'Daily Fuel Consumption (Enhanced)', '#3b82f6', 'bar',
-                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
-                )
-                if df1 is not None:
-                    st.download_button("⬇️ Download Chart Data (Fuel Consumption)", df1.to_csv(index=False).encode('utf-8'), file_name="fuel_consumption_chart.csv", mime="text/csv", key="dl_chart_fuel_consumption")
-            
-            with col2:
-                fig2, df2 = create_ultra_interactive_chart(
-                    daily_fuel, 'date', 'daily_cost_rands',
-                    'Daily Fuel Cost (Real Pricing)', '#ef4444', 'area',
-                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
-                )
-                if df2 is not None:
-                    st.download_button("⬇️ Download Chart Data (Fuel Cost)", df2.to_csv(index=False).encode('utf-8'), file_name="fuel_cost_chart.csv", mime="text/csv", key="dl_chart_fuel_cost")
-            
-            # Fuel purchase tracking comparison
-            if not fuel_purchases.empty:
-                st.markdown("### 💰 Fuel Purchase vs Consumption Analysis")
-                
-                # Calculate totals for comparison
-                total_purchased = 0
-                total_consumed = fuel_stats.get('total_fuel_liters', 0)
-                
-                if 'quantity' in fuel_purchases.columns:
-                    total_purchased = fuel_purchases['quantity'].sum()
-                elif any('litre' in col for col in fuel_purchases.columns):
-                    litre_cols = [col for col in fuel_purchases.columns if 'litre' in col]
-                    total_purchased = fuel_purchases[litre_cols[0]].sum()
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    render_clean_metric(
-                        "Fuel Purchased",
-                        f"{total_purchased:,.0f} L",
-                        f"📦 Total bought",
-                        "cyan", "🛒",
-                        "Fuel procurement tracking"
-                    )
-                
-                with col2:
-                    render_clean_metric(
-                        "Fuel Consumed",
-                        f"{total_consumed:,.0f} L",
-                        f"⛽ Total used",
-                        "blue", "🔥",
-                        "Generator consumption"
-                    )
-                
-                with col3:
-                    balance = total_purchased - total_consumed
-                    render_clean_metric(
-                        "Fuel Balance",
-                        f"{balance:,.0f} L",
-                        "📊 Inventory status",
-                        "green" if balance > 0 else "red", "⚖️",
-                        "Surplus" if balance > 0 else "Deficit"
-                    )
-                
-                # Purchase tracking charts (monthly aggregation)
-                if 'date' in fuel_purchases.columns:
-                    date_col = [col for col in fuel_purchases.columns if 'date' in col][0]
-                    qty_cols = [col for col in fuel_purchases.columns if 'litre' in col or 'quantity' in col]
-                    price_col = 'price_per_litre' if 'price_per_litre' in fuel_purchases.columns else None
-                    if qty_cols:
-                        fp = fuel_purchases.copy()
-                        fp[date_col] = pd.to_datetime(fp[date_col], errors='coerce')
-                        fp = fp.dropna(subset=[date_col])
-                        fp['month'] = fp[date_col].dt.to_period('M').dt.to_timestamp()
-                        monthly = fp.groupby('month').agg({qty_cols[0]: 'sum', **({price_col: 'mean'} if price_col else {})}).reset_index()
-                        monthly.rename(columns={qty_cols[0]: 'litres'}, inplace=True)
-                        c1m, c2m = st.columns(2)
-                        c1m, c2m, c3m = st.columns(3)
-                        with c1m:
-                            create_ultra_interactive_chart(
-                                monthly, 'month', 'litres',
-                                'Monthly Fuel Purchased (L)', '#10b981', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
-                            )
-                        if price_col and not monthly.empty and price_col in monthly.columns:
-                            # Ensure price data is valid
-                            monthly_clean = monthly.dropna(subset=[price_col])
-                            if not monthly_clean.empty:
-                                with c2m:
-                                    create_ultra_interactive_chart(
-                                        monthly_clean, 'month', price_col,
-                                        'Monthly Avg Price per Litre', '#f59e0b', 'line', height=350, enable_zoom=True, selection_mode=selection_mode
-                                    )
-                        # Monthly Generator Cost chart
-                        if not daily_fuel.empty:
-                            monthly_cost = daily_fuel.copy()
-                            monthly_cost['month'] = monthly_cost['date'].dt.to_period('M').dt.to_timestamp()
-                            monthly_cost_agg = monthly_cost.groupby('month')['daily_cost_rands'].sum().reset_index()
-                            monthly_cost_agg.rename(columns={'daily_cost_rands': 'monthly_cost_rands'}, inplace=True)
-                            with c3m:
-                                create_ultra_interactive_chart(
-                                    monthly_cost_agg, 'month', 'monthly_cost_rands',
-                                    'Monthly Generator Cost (R)', '#ef4444', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
-                                )
-                        
-                        # Fuel Purchase vs Consumption Analysis
-                        st.subheader("💡 Fuel Purchase vs Consumption Analysis")
-                        
-                        if not fuel_purchases.empty and not daily_fuel.empty:
-                            # Create comprehensive analysis
-                            analysis_data = []
-                            
-                            # Get purchase data by month
-                            fuel_purchases['month'] = pd.to_datetime(fuel_purchases['date']).dt.to_period('M').dt.to_timestamp()
-                            # Normalize fuel_purchases columns
-                            fuel_purchases_norm = normalize_purchase_columns(fuel_purchases)
-                            purchase_monthly = fuel_purchases_norm.groupby('month').agg({
-                                'litres': 'sum',
-                                'cost': 'sum'
-                            }).reset_index()
-                            purchase_monthly = purchase_monthly.rename(columns={'litres': 'purchased_litres', 'cost': 'purchase_cost'})
-                            purchase_monthly.rename(columns={'amount(liters)': 'purchased_litres', 'Cost(Rands)': 'purchase_cost'}, inplace=True)
-                            
-                            # Get consumption data by month
-                            consumption_monthly = daily_fuel.copy()
-                            consumption_monthly['month'] = consumption_monthly['date'].dt.to_period('M').dt.to_timestamp()
-                            consumed_monthly = consumption_monthly.groupby('month').agg({
-                                'fuel_consumed_liters': 'sum',
-                                'daily_cost_rands': 'sum'
-                            }).reset_index()
-                            consumed_monthly.rename(columns={'fuel_consumed_liters': 'consumed_litres', 'daily_cost_rands': 'consumption_cost'}, inplace=True)
-                            
-                            # Merge purchase and consumption data
-                            comparison_df = pd.merge(purchase_monthly, consumed_monthly, on='month', how='outer').fillna(0)
-                            comparison_df['net_fuel'] = comparison_df['purchased_litres'] - comparison_df['consumed_litres']
-                            comparison_df['utilization_rate'] = (comparison_df['consumed_litres'] / comparison_df['purchased_litres'] * 100).fillna(0)
-                            
-                            # Display comparison charts
-                            comp_col1, comp_col2 = st.columns(2)
-                            
-                            if not comparison_df.empty:
-                                with comp_col1:
-                                    # Create dual-bar chart for purchased vs consumed
-                                    import plotly.graph_objects as go
-                                    
-                                    fig = go.Figure()
-                                    fig.add_trace(go.Bar(
-                                        x=comparison_df['month'],
-                                        y=comparison_df['purchased_litres'],
-                                        name='Purchased (L)',
-                                        marker_color='#10b981'
-                                    ))
-                                    fig.add_trace(go.Bar(
-                                        x=comparison_df['month'],
-                                        y=comparison_df['consumed_litres'],
-                                        name='Consumed (L)',
-                                        marker_color='#ef4444'
-                                    ))
-                                    
-                                    fig.update_layout(
-                                        title="Monthly Fuel: Purchased vs Consumed",
-                                        xaxis_title="Month",
-                                        yaxis_title="Litres",
-                                        barmode='group',
-                                        height=400
-                                    )
-                                    
-                                    st.plotly_chart(fig, width='stretch')
-                                
-                                with comp_col2:
-                                    # Net fuel balance
-                                    create_ultra_interactive_chart(
-                                        comparison_df, 'month', 'net_fuel',
-                                        'Monthly Net Fuel Balance (L)', '#8b5cf6', 'bar', height=400, enable_zoom=True, selection_mode=selection_mode
-                                    )
-                            
-                            # Summary metrics
-                            st.markdown("#### 📈 Purchase vs Consumption Summary")
-                            sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4)
-                            
-                            total_purchased = comparison_df['purchased_litres'].sum()
-                            total_consumed = comparison_df['consumed_litres'].sum()
-                            net_balance = total_purchased - total_consumed
-                            overall_utilization = (total_consumed / total_purchased * 100) if total_purchased > 0 else 0
-                            
-                            with sum_col1:
-                                render_clean_metric("Total Purchased", f"{total_purchased:.1f} L", f"From {len(fuel_purchases)} purchases", "green", "⛽")
-                            with sum_col2:
-                                render_clean_metric("Total Consumed", f"{total_consumed:.1f} L", f"Generator usage", "red", "🔥")
-                            with sum_col3:
-                                render_clean_metric("Net Balance", f"{net_balance:.1f} L", "Remaining/Deficit", "purple", "📊")
-                            with sum_col4:
-                                render_clean_metric("Utilization Rate", f"{overall_utilization:.1f}%", "Efficiency metric", "cyan", "⚡")
-                            
-                            # Download comparison data
-                            st.download_button(
-                                'Download Purchase vs Consumption Analysis',
-                                comparison_df.to_csv(index=False).encode('utf-8'),
-                                file_name='fuel_purchase_consumption_analysis.csv',
-                                mime='text/csv',
-                                key='dl_comparison_analysis'
-                            )
-                        st.download_button('Monthly Purchases CSV', monthly.to_csv(index=False).encode('utf-8'), file_name='fuel_purchases_monthly.csv', mime='text/csv', key='dl_monthly_purchases')
-                        if not daily_fuel.empty:
-                            st.download_button('Monthly Generator Cost CSV', monthly_cost_agg.to_csv(index=False).encode('utf-8'), file_name='monthly_generator_cost.csv', mime='text/csv', key='dl_monthly_generator_cost')
-        else:
-            st.info("📊 No generator data available for selected period")
-    
-    # Solar Performance Analysis - REDESIGNED 2025-12-29
-    with tab2:
-        try:
-            from solar_tab_redesigned import render_solar_performance_tab
-            render_solar_performance_tab()
-        except ImportError as e:
-            st.error(f"❌ Solar performance module not available: {e}")
-            st.header("☀️ Solar Performance")
-            st.markdown("**System analysis temporarily unavailable**")
-            st.markdown("Please ensure solar_tab_redesigned.py and solar_analysis_production.py are present.")
-        except Exception as e:
-            st.error(f"❌ Solar performance system error: {e}")
-            st.header("☀️ Solar Performance")
-            st.markdown("**System analysis temporarily unavailable**")
-            import traceback
-            st.code(traceback.format_exc())
-    # Data Health panel and summary downloads in System Overview tab
-    with tab4:
-        st.markdown("## 🩺 Data Health & System Overview")
-
-        # Quick health checks
-        def df_health(df, name):
-            if df is None or df.empty:
-                return f"❌ {name}: missing/empty"
-            rows, cols = df.shape
-            return f"✅ {name}: {rows} rows, {cols} cols"
-
-        st.markdown("### Data Sources")
-        sources = {
-            'Generator': daily_fuel,
-            'Fuel Purchases': fuel_purchases,
-            'Solar Daily': daily_solar,
-            'Solar Hourly': hourly_solar,
-            'Inverter Performance': inverter_performance,
-        }
-        for k, v in sources.items():
-            st.write(df_health(v, k))
-
-        # Recent dates present
-        recent_info = []
-        for name, df in [('Generator', daily_fuel), ('Solar', daily_solar)]:
-            if not df.empty and 'date' in df.columns:
-                recent_info.append(f"{name}: {pd.to_datetime(df['date']).max().date()}")
-        if recent_info:
-            st.info("Latest data points — " + " • ".join(recent_info))
-
-        # Downloads
-        with st.expander("⬇️ Export all analytics as CSVs", expanded=False):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.download_button("Generator Daily CSV", daily_fuel.to_csv(index=False).encode('utf-8') if not daily_fuel.empty else b"", file_name="generator_daily.csv", mime="text/csv", key="dl_generator_daily_bottom", disabled=daily_fuel.empty)
-                st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_bottom", disabled=fuel_purchases.empty)
-            with c2:
-                st.download_button("Solar Daily CSV", daily_solar.to_csv(index=False).encode('utf-8') if not daily_solar.empty else b"", file_name="solar_daily.csv", mime="text/csv", key="dl_solar_daily_bottom", disabled=daily_solar.empty)
-                st.download_button("Hourly Solar CSV", hourly_solar.to_csv(index=False).encode('utf-8') if not hourly_solar.empty else b"", file_name="solar_hourly.csv", mime="text/csv", key="dl_solar_hourly_bottom", disabled=hourly_solar.empty)
-            with c3:
-                st.download_button("Inverter Performance CSV", inverter_performance.to_csv(index=False).encode('utf-8') if not inverter_performance.empty else b"", file_name="inverter_performance.csv", mime="text/csv", key="dl_inverter_perf_bottom", disabled=inverter_performance.empty)
-
-        st.markdown("---")
-
-    # Factory Optimization Tab
-    with tab3:
-        st.markdown("## 🏭 Factory Energy Optimization")
-        st.info("📊 Factory energy analysis module ready for implementation")
-    
-    # System Overview Tab
-    with tab4:
-        st.markdown("## 📊 Complete System Overview")
-        
-        # System health with FIXED DataFrame check
-        data_available = 0
-        if not daily_fuel.empty: data_available += 1
-        if not daily_solar.empty: data_available += 1
-        if not fuel_purchases.empty: data_available += 1
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            data_quality = (data_available / 3) * 100
-            render_clean_metric(
-                "System Health",
-                f"{data_quality:.0f}%",
-                "📊 Data coverage",
-                "green" if data_quality > 80 else "yellow", "🔧"
-            )
-        
-        with col2:
-            render_clean_metric(
-                "Active Systems",
-                f"{data_available}/3",
-                "⚡ Online modules",
-                "green", "📡"
-            )
-        
-        with col3:
-            total_cost = fuel_stats.get('total_cost_rands', 0)
-            solar_value = solar_stats.get('total_value_rands', 0)
-            render_clean_metric(
-                "Net Energy Cost",
-                f"R {total_cost - solar_value:,.0f}",
-                f"💰 After solar savings",
-                "blue", "💸"
-            )
-        
-        with col4:
-            render_clean_metric(
-                "Data Freshness",
-                "Live",
-                f"🕐 {datetime.now().strftime('%H:%M')}",
-                "green", "📊"
-            )
-
-if __name__ == "__main__":
-    main()
 # ==============================================================================
 # GENERATOR EFFICIENCY & RUNTIME TRACKING - NEW ENHANCEMENTS
 # ==============================================================================
@@ -3322,3 +2734,595 @@ RECOMMENDATIONS:
     # NEW: Data Quality Dashboard Tab
     with tab5:
         render_data_quality_dashboard()
+
+def main():
+    """Ultra-modern improved main application - ENHANCED UI VERSION"""
+    
+    # Enhanced header with status badges
+    col_title, col_status = st.columns([3, 1])
+    
+    with col_title:
+        st.title("🏭 Durr Bottling Energy Dashboard")
+        st.markdown("**Track your energy usage and costs in simple, easy-to-understand charts**")
+    
+    with col_status:
+        render_status_badge("System Live", "live", "🟢")
+        st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+    
+    # Welcome message for non-technical users
+    st.info("""
+        👋 **Welcome!** This dashboard shows you:
+        - 🔥 **Diesel Usage** - How much fuel your generator uses and costs
+        - ☀️ **Solar Power** - Free electricity from your solar panels
+        - ⚡ **Factory Electricity** - How much power your factory consumes
+        - 💰 **Costs & Savings** - Where your money goes and how you can save
+    """)
+    
+    st.markdown("---")
+    
+    # Quick Action Panel
+    with st.expander("⚡ Quick Actions", expanded=False):
+        render_quick_action_panel()
+    
+    # Silent data loading
+    all_data = load_all_energy_data_silent()
+
+    # Column mapping helper
+    def apply_column_mapping(df, mapping_key):
+        if df is None or df.empty:
+            return df
+        expected = ["last_changed", "entity_id", "state"]
+        missing = [c for c in expected if c not in df.columns]
+        if not missing:
+            return df
+        # Show mapping UI in sidebar
+        with st.sidebar.expander(f"Map columns for {mapping_key}", expanded=False):
+            st.write("Select which columns correspond to the expected fields:")
+            selections = {}
+            for target in missing:
+                options = [c for c in df.columns]
+                if options:
+                    selections[target] = st.selectbox(f"{mapping_key} → {target}", options, key=f"map_{mapping_key}_{target}")
+            if selections:
+                df = df.rename(columns=selections)
+        return df
+
+    # Apply mapping to generator and solar datasets if needed
+    all_data['generator'] = apply_column_mapping(all_data.get('generator', pd.DataFrame()), 'Generator')
+    all_data['solar'] = apply_column_mapping(all_data.get('solar', pd.DataFrame()), 'Solar')
+    
+    # Global date range selector
+    st.markdown("---")
+    start_date, end_date, period_days = create_date_range_selector("main_dashboard")
+    
+    # Ultra-modern sidebar
+    with st.sidebar:
+        st.markdown("### ⚡ Energy Control Center")
+        
+        # Data Manager: download/update data sources
+        with st.expander("🗂️ Data Manager (download/update data files)", expanded=False):
+            BASE = "https://raw.githubusercontent.com/Saint-Akim/Solar-performance/main/"
+            downloads = {
+                "New_inverter.csv": BASE + "New_inverter.csv",
+                "FACTORY ELEC.csv": BASE + "FACTORY%20ELEC.csv",
+                "Solar_Goodwe&Fronius-Jan.csv": BASE + "Solar_Goodwe%26Fronius-Jan.csv",
+                "Solar_goodwe&Fronius_April.csv": BASE + "Solar_goodwe%26Fronius_April.csv",
+                "Solar_goodwe&Fronius_may.csv": BASE + "Solar_goodwe%26Fronius_may.csv",
+                "gen (2).csv": BASE + "gen%20%282%29.csv",
+                "gen (2).xlsx": BASE + "gen%20%282%29.xlsx",
+                "history (5).csv": BASE + "history%20%285%29.csv",
+                "history (5).xlsx": BASE + "history%20%285%29.xlsx",
+                "Durr bottling Generator filling.xlsx": BASE + "Durr%20bottling%20Generator%20filling.xlsx",
+                "September 2025.xlsx": BASE + "September%202025.xlsx",
+            }
+            dm_cols = st.columns(2)
+            for i, (fname, url) in enumerate(downloads.items()):
+                with dm_cols[i % 2]:
+                    if st.button(f"⬇️ {fname}", key=f"dm_{fname}"):
+                        try:
+                            import requests
+                            r = requests.get(url, timeout=30)
+                            if r.status_code == 200:
+                                with open(fname, "wb") as f:
+                                    f.write(r.content)
+                                st.success(f"Saved {fname}")
+                                st.cache_data.clear()
+                            else:
+                                st.warning(f"Could not fetch {fname}: {r.status_code}")
+                        except Exception as e:
+                            st.error(f"Download failed for {fname}: {e}")
+        
+        # Column Mapping UI (appears when needed)
+        st.markdown("### 🧭 Data Column Mapping")
+        st.caption("If your files use different column names, map them here.")
+        st.markdown("#### Enhanced v10.0 • Real-Time Intelligence")
+        st.markdown("---")
+        
+        # Enhanced preferences
+        st.markdown("### 🎛️ Dashboard Preferences")
+        
+        chart_theme = st.selectbox(
+            "Chart Theme",
+            ["Dark (Default)", "High Contrast", "Minimal", "Colorful"],
+            help="Choose your preferred chart styling"
+        )
+        
+        enable_animations = st.checkbox("Enable Animations", value=True, help="Smooth chart transitions")
+        show_sparklines = st.checkbox("Show Trend Sparklines", value=True, help="Mini charts in metrics")
+        selection_mode = st.selectbox(
+            "Selection Mode",
+            ["Box Select", "Lasso Select", "Pan", "Zoom"],
+            help="Choose how to interact with charts"
+        )
+        pricing_mode = st.selectbox(
+            "Fuel Pricing Mode",
+            ["nearest_prior", "monthly_average"],
+            index=0,
+            help="Nearest prior: Use closest purchase price per day (recommended). Monthly average: Use monthly mean price."
+        )
+        
+        st.markdown("---")
+        
+        # Quick actions with FIXED width
+        if st.button("🔄 Refresh Data", width='stretch'):
+            st.cache_data.clear()
+            st.rerun()
+        
+        if st.button("📧 Email Report", width='stretch'):
+            st.success("✅ Report sent to stakeholders")
+    
+    # Process data with selected date range
+    with st.spinner("Processing enhanced analytics..."):
+        # Enhanced fuel analysis with real pricing
+        daily_fuel, fuel_stats, fuel_purchases, tank_validation = calculate_enhanced_fuel_analysis(
+            all_data.get('generator', pd.DataFrame()),
+            all_data.get('fuel_history', pd.DataFrame()),
+            all_data.get('fuel_purchases', pd.DataFrame()),
+            all_data.get('generator_detailed', pd.DataFrame()),
+            start_date, end_date
+        )
+        
+        # Enhanced solar analysis with 3-inverter system
+        daily_solar, solar_stats, hourly_solar, inverter_performance = process_enhanced_solar_analysis(
+            all_data.get('solar', pd.DataFrame()),
+            start_date, end_date
+        )
+    
+    # Enhanced tabs with Data Quality tab
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🔋 Generator Fuel Analysis", 
+        "☀️ Solar Performance", 
+        "🏭 Factory Optimization",
+        "📊 System Overview",
+        "🩺 Data Quality"
+    ])
+    
+    # Generator Analysis Tab (ENHANCED WITH REAL PRICING)
+    with tab1:
+        st.header("🔋 Generator Fuel Analysis")
+        st.markdown("**Real-time fuel consumption monitoring with actual market pricing**")
+        
+        if not daily_fuel.empty and fuel_stats:
+            # Enhanced metrics with real pricing info
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                total_fuel = fuel_stats['total_fuel_liters']
+                render_clean_metric(
+                    "Total Fuel Consumed",
+                    f"{total_fuel:,.1f} L",
+                    f"📈 Real pricing used",
+                    "blue", "⛽",
+                    f"Period: {period_days} days • Market prices applied",
+                    fuel_stats.get('fuel_consumption_trend', [])
+                )
+                # Add business context badge
+                daily_avg = total_fuel / max(period_days, 1)
+                context_html = add_business_context_badge('fuel_daily_liters', daily_avg)
+                if context_html:
+                    st.markdown(context_html, unsafe_allow_html=True)
+            
+            with col2:
+                total_cost = fuel_stats['total_cost_rands']
+                render_clean_metric(
+                    "Total Fuel Cost",
+                    f"R {total_cost:,.0f}",
+                    f"💰 R{fuel_stats['average_cost_per_liter']:.2f}/L market avg",
+                    "red", "💸",
+                    "Based on actual purchase prices",
+                    fuel_stats.get('cost_trend', [])
+                )
+                # Add business context badge
+                daily_cost = total_cost / max(period_days, 1)
+                context_html = add_business_context_badge('fuel_cost_daily', daily_cost)
+                if context_html:
+                    st.markdown(context_html, unsafe_allow_html=True)
+            
+            with col3:
+                efficiency = fuel_stats.get('average_efficiency', 0)
+                render_clean_metric(
+                    "Generator Efficiency",
+                    f"{efficiency:.1f}%",
+                    f"⚡ Runtime: {fuel_stats.get('total_runtime_hours', 0):.0f}h",
+                    "green" if efficiency > 70 else "yellow", "⚡",
+                    "Performance rating"
+                )
+            
+            with col4:
+                render_clean_metric(
+                    "Daily Average",
+                    f"{fuel_stats.get('average_daily_fuel', 0):.1f} L/day",
+                    f"📅 Over {fuel_stats.get('period_days', 0)} days",
+                    "purple", "📈",
+                    "Consumption pattern"
+                )
+            
+            # Data downloads
+            with st.expander("⬇️ Download datasets", expanded=False):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.download_button("Daily Fuel CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="daily_fuel.csv", mime="text/csv", key="dl_daily_fuel_top")
+                with c2:
+                    st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_top", disabled=fuel_purchases.empty)
+                with c3:
+                    st.download_button("Runtime/Efficiency CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="fuel_runtime_efficiency.csv", mime="text/csv", key="dl_runtime_efficiency_top")
+
+            # Add new analysis sections BEFORE charts
+            st.markdown("---")
+            
+            # Generator Efficiency Section
+            render_generator_efficiency_section(
+                all_data.get('generator', pd.DataFrame()),
+                start_date, 
+                end_date
+            )
+            
+            st.markdown("---")
+            
+            # Runtime Analysis Section
+            render_runtime_analysis_section(
+                all_data.get('generator', pd.DataFrame()),
+                start_date,
+                end_date
+            )
+            
+            st.markdown("---")
+            
+            # Fuel Tank Analysis Section
+            render_fuel_tank_analysis_section(
+                all_data.get('generator', pd.DataFrame()),
+                all_data.get('fuel_history', pd.DataFrame()),
+                start_date,
+                end_date
+            )
+            
+            st.markdown("---")
+            
+            # Enhanced fuel analysis charts
+            st.markdown("### 📊 Fuel Usage Summary")
+            st.caption("Here's what your generator used during this time period")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig1, df1 = create_ultra_interactive_chart(
+                    daily_fuel, 'date', 'fuel_consumed_liters',
+                    'Daily Fuel Consumption (Enhanced)', '#3b82f6', 'bar',
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
+                )
+                if df1 is not None:
+                    st.download_button("⬇️ Download Chart Data (Fuel Consumption)", df1.to_csv(index=False).encode('utf-8'), file_name="fuel_consumption_chart.csv", mime="text/csv", key="dl_chart_fuel_consumption")
+            
+            with col2:
+                fig2, df2 = create_ultra_interactive_chart(
+                    daily_fuel, 'date', 'daily_cost_rands',
+                    'Daily Fuel Cost (Real Pricing)', '#ef4444', 'area',
+                    height=400, enable_zoom=True, enable_selection=True, selection_mode=selection_mode
+                )
+                if df2 is not None:
+                    st.download_button("⬇️ Download Chart Data (Fuel Cost)", df2.to_csv(index=False).encode('utf-8'), file_name="fuel_cost_chart.csv", mime="text/csv", key="dl_chart_fuel_cost")
+            
+            # Fuel purchase tracking comparison
+            if not fuel_purchases.empty:
+                st.markdown("### 💰 Fuel Purchase vs Consumption Analysis")
+                
+                # Calculate totals for comparison
+                total_purchased = 0
+                total_consumed = fuel_stats.get('total_fuel_liters', 0)
+                
+                if 'quantity' in fuel_purchases.columns:
+                    total_purchased = fuel_purchases['quantity'].sum()
+                elif any('litre' in col for col in fuel_purchases.columns):
+                    litre_cols = [col for col in fuel_purchases.columns if 'litre' in col]
+                    total_purchased = fuel_purchases[litre_cols[0]].sum()
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    render_clean_metric(
+                        "Fuel Purchased",
+                        f"{total_purchased:,.0f} L",
+                        f"📦 Total bought",
+                        "cyan", "🛒",
+                        "Fuel procurement tracking"
+                    )
+                
+                with col2:
+                    render_clean_metric(
+                        "Fuel Consumed",
+                        f"{total_consumed:,.0f} L",
+                        f"⛽ Total used",
+                        "blue", "🔥",
+                        "Generator consumption"
+                    )
+                
+                with col3:
+                    balance = total_purchased - total_consumed
+                    render_clean_metric(
+                        "Fuel Balance",
+                        f"{balance:,.0f} L",
+                        "📊 Inventory status",
+                        "green" if balance > 0 else "red", "⚖️",
+                        "Surplus" if balance > 0 else "Deficit"
+                    )
+                
+                # Purchase tracking charts (monthly aggregation)
+                if 'date' in fuel_purchases.columns:
+                    date_col = [col for col in fuel_purchases.columns if 'date' in col][0]
+                    qty_cols = [col for col in fuel_purchases.columns if 'litre' in col or 'quantity' in col]
+                    price_col = 'price_per_litre' if 'price_per_litre' in fuel_purchases.columns else None
+                    if qty_cols:
+                        fp = fuel_purchases.copy()
+                        fp[date_col] = pd.to_datetime(fp[date_col], errors='coerce')
+                        fp = fp.dropna(subset=[date_col])
+                        fp['month'] = fp[date_col].dt.to_period('M').dt.to_timestamp()
+                        monthly = fp.groupby('month').agg({qty_cols[0]: 'sum', **({price_col: 'mean'} if price_col else {})}).reset_index()
+                        monthly.rename(columns={qty_cols[0]: 'litres'}, inplace=True)
+                        c1m, c2m = st.columns(2)
+                        c1m, c2m, c3m = st.columns(3)
+                        with c1m:
+                            create_ultra_interactive_chart(
+                                monthly, 'month', 'litres',
+                                'Monthly Fuel Purchased (L)', '#10b981', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
+                            )
+                        if price_col and not monthly.empty and price_col in monthly.columns:
+                            # Ensure price data is valid
+                            monthly_clean = monthly.dropna(subset=[price_col])
+                            if not monthly_clean.empty:
+                                with c2m:
+                                    create_ultra_interactive_chart(
+                                        monthly_clean, 'month', price_col,
+                                        'Monthly Avg Price per Litre', '#f59e0b', 'line', height=350, enable_zoom=True, selection_mode=selection_mode
+                                    )
+                        # Monthly Generator Cost chart
+                        if not daily_fuel.empty:
+                            monthly_cost = daily_fuel.copy()
+                            monthly_cost['month'] = monthly_cost['date'].dt.to_period('M').dt.to_timestamp()
+                            monthly_cost_agg = monthly_cost.groupby('month')['daily_cost_rands'].sum().reset_index()
+                            monthly_cost_agg.rename(columns={'daily_cost_rands': 'monthly_cost_rands'}, inplace=True)
+                            with c3m:
+                                create_ultra_interactive_chart(
+                                    monthly_cost_agg, 'month', 'monthly_cost_rands',
+                                    'Monthly Generator Cost (R)', '#ef4444', 'bar', height=350, enable_zoom=True, selection_mode=selection_mode
+                                )
+                        
+                        # Fuel Purchase vs Consumption Analysis
+                        st.subheader("💡 Fuel Purchase vs Consumption Analysis")
+                        
+                        if not fuel_purchases.empty and not daily_fuel.empty:
+                            # Create comprehensive analysis
+                            analysis_data = []
+                            
+                            # Get purchase data by month
+                            fuel_purchases['month'] = pd.to_datetime(fuel_purchases['date']).dt.to_period('M').dt.to_timestamp()
+                            # Normalize fuel_purchases columns
+                            fuel_purchases_norm = normalize_purchase_columns(fuel_purchases)
+                            purchase_monthly = fuel_purchases_norm.groupby('month').agg({
+                                'litres': 'sum',
+                                'cost': 'sum'
+                            }).reset_index()
+                            purchase_monthly = purchase_monthly.rename(columns={'litres': 'purchased_litres', 'cost': 'purchase_cost'})
+                            purchase_monthly.rename(columns={'amount(liters)': 'purchased_litres', 'Cost(Rands)': 'purchase_cost'}, inplace=True)
+                            
+                            # Get consumption data by month
+                            consumption_monthly = daily_fuel.copy()
+                            consumption_monthly['month'] = consumption_monthly['date'].dt.to_period('M').dt.to_timestamp()
+                            consumed_monthly = consumption_monthly.groupby('month').agg({
+                                'fuel_consumed_liters': 'sum',
+                                'daily_cost_rands': 'sum'
+                            }).reset_index()
+                            consumed_monthly.rename(columns={'fuel_consumed_liters': 'consumed_litres', 'daily_cost_rands': 'consumption_cost'}, inplace=True)
+                            
+                            # Merge purchase and consumption data
+                            comparison_df = pd.merge(purchase_monthly, consumed_monthly, on='month', how='outer').fillna(0)
+                            comparison_df['net_fuel'] = comparison_df['purchased_litres'] - comparison_df['consumed_litres']
+                            comparison_df['utilization_rate'] = (comparison_df['consumed_litres'] / comparison_df['purchased_litres'] * 100).fillna(0)
+                            
+                            # Display comparison charts
+                            comp_col1, comp_col2 = st.columns(2)
+                            
+                            if not comparison_df.empty:
+                                with comp_col1:
+                                    # Create dual-bar chart for purchased vs consumed
+                                    import plotly.graph_objects as go
+                                    
+                                    fig = go.Figure()
+                                    fig.add_trace(go.Bar(
+                                        x=comparison_df['month'],
+                                        y=comparison_df['purchased_litres'],
+                                        name='Purchased (L)',
+                                        marker_color='#10b981'
+                                    ))
+                                    fig.add_trace(go.Bar(
+                                        x=comparison_df['month'],
+                                        y=comparison_df['consumed_litres'],
+                                        name='Consumed (L)',
+                                        marker_color='#ef4444'
+                                    ))
+                                    
+                                    fig.update_layout(
+                                        title="Monthly Fuel: Purchased vs Consumed",
+                                        xaxis_title="Month",
+                                        yaxis_title="Litres",
+                                        barmode='group',
+                                        height=400
+                                    )
+                                    
+                                    st.plotly_chart(fig, width='stretch')
+                                
+                                with comp_col2:
+                                    # Net fuel balance
+                                    create_ultra_interactive_chart(
+                                        comparison_df, 'month', 'net_fuel',
+                                        'Monthly Net Fuel Balance (L)', '#8b5cf6', 'bar', height=400, enable_zoom=True, selection_mode=selection_mode
+                                    )
+                            
+                            # Summary metrics
+                            st.markdown("#### 📈 Purchase vs Consumption Summary")
+                            sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4)
+                            
+                            total_purchased = comparison_df['purchased_litres'].sum()
+                            total_consumed = comparison_df['consumed_litres'].sum()
+                            net_balance = total_purchased - total_consumed
+                            overall_utilization = (total_consumed / total_purchased * 100) if total_purchased > 0 else 0
+                            
+                            with sum_col1:
+                                render_clean_metric("Total Purchased", f"{total_purchased:.1f} L", f"From {len(fuel_purchases)} purchases", "green", "⛽")
+                            with sum_col2:
+                                render_clean_metric("Total Consumed", f"{total_consumed:.1f} L", f"Generator usage", "red", "🔥")
+                            with sum_col3:
+                                render_clean_metric("Net Balance", f"{net_balance:.1f} L", "Remaining/Deficit", "purple", "📊")
+                            with sum_col4:
+                                render_clean_metric("Utilization Rate", f"{overall_utilization:.1f}%", "Efficiency metric", "cyan", "⚡")
+                            
+                            # Download comparison data
+                            st.download_button(
+                                'Download Purchase vs Consumption Analysis',
+                                comparison_df.to_csv(index=False).encode('utf-8'),
+                                file_name='fuel_purchase_consumption_analysis.csv',
+                                mime='text/csv',
+                                key='dl_comparison_analysis'
+                            )
+                        st.download_button('Monthly Purchases CSV', monthly.to_csv(index=False).encode('utf-8'), file_name='fuel_purchases_monthly.csv', mime='text/csv', key='dl_monthly_purchases')
+                        if not daily_fuel.empty:
+                            st.download_button('Monthly Generator Cost CSV', monthly_cost_agg.to_csv(index=False).encode('utf-8'), file_name='monthly_generator_cost.csv', mime='text/csv', key='dl_monthly_generator_cost')
+        else:
+            st.info("📊 No generator data available for selected period")
+    
+    # Solar Performance Analysis - REDESIGNED 2025-12-29
+    with tab2:
+        try:
+            from solar_tab_redesigned import render_solar_performance_tab
+            render_solar_performance_tab()
+        except ImportError as e:
+            st.error(f"❌ Solar performance module not available: {e}")
+            st.header("☀️ Solar Performance")
+            st.markdown("**System analysis temporarily unavailable**")
+            st.markdown("Please ensure solar_tab_redesigned.py and solar_analysis_production.py are present.")
+        except Exception as e:
+            st.error(f"❌ Solar performance system error: {e}")
+            st.header("☀️ Solar Performance")
+            st.markdown("**System analysis temporarily unavailable**")
+            import traceback
+            st.code(traceback.format_exc())
+    # Data Health panel and summary downloads in System Overview tab
+    with tab4:
+        st.markdown("## 🩺 Data Health & System Overview")
+
+        # Quick health checks
+        def df_health(df, name):
+            if df is None or df.empty:
+                return f"❌ {name}: missing/empty"
+            rows, cols = df.shape
+            return f"✅ {name}: {rows} rows, {cols} cols"
+
+        st.markdown("### Data Sources")
+        sources = {
+            'Generator': daily_fuel,
+            'Fuel Purchases': fuel_purchases,
+            'Solar Daily': daily_solar,
+            'Solar Hourly': hourly_solar,
+            'Inverter Performance': inverter_performance,
+        }
+        for k, v in sources.items():
+            st.write(df_health(v, k))
+
+        # Recent dates present
+        recent_info = []
+        for name, df in [('Generator', daily_fuel), ('Solar', daily_solar)]:
+            if not df.empty and 'date' in df.columns:
+                recent_info.append(f"{name}: {pd.to_datetime(df['date']).max().date()}")
+        if recent_info:
+            st.info("Latest data points — " + " • ".join(recent_info))
+
+        # Downloads
+        with st.expander("⬇️ Export all analytics as CSVs", expanded=False):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.download_button("Generator Daily CSV", daily_fuel.to_csv(index=False).encode('utf-8') if not daily_fuel.empty else b"", file_name="generator_daily.csv", mime="text/csv", key="dl_generator_daily_bottom", disabled=daily_fuel.empty)
+                st.download_button("Fuel Purchases CSV", fuel_purchases.to_csv(index=False).encode('utf-8') if not fuel_purchases.empty else b"", file_name="fuel_purchases.csv", mime="text/csv", key="dl_fuel_purchases_bottom", disabled=fuel_purchases.empty)
+            with c2:
+                st.download_button("Solar Daily CSV", daily_solar.to_csv(index=False).encode('utf-8') if not daily_solar.empty else b"", file_name="solar_daily.csv", mime="text/csv", key="dl_solar_daily_bottom", disabled=daily_solar.empty)
+                st.download_button("Hourly Solar CSV", hourly_solar.to_csv(index=False).encode('utf-8') if not hourly_solar.empty else b"", file_name="solar_hourly.csv", mime="text/csv", key="dl_solar_hourly_bottom", disabled=hourly_solar.empty)
+            with c3:
+                st.download_button("Inverter Performance CSV", inverter_performance.to_csv(index=False).encode('utf-8') if not inverter_performance.empty else b"", file_name="inverter_performance.csv", mime="text/csv", key="dl_inverter_perf_bottom", disabled=inverter_performance.empty)
+
+        st.markdown("---")
+
+    # Factory Optimization Tab
+    with tab3:
+        st.markdown("## 🏭 Factory Energy Optimization")
+        st.info("📊 Factory energy analysis module ready for implementation")
+    
+    # System Overview Tab
+    with tab4:
+        st.markdown("## 📊 Complete System Overview")
+        
+        # System health with FIXED DataFrame check
+        data_available = 0
+        if not daily_fuel.empty: data_available += 1
+        if not daily_solar.empty: data_available += 1
+        if not fuel_purchases.empty: data_available += 1
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            data_quality = (data_available / 3) * 100
+            render_clean_metric(
+                "System Health",
+                f"{data_quality:.0f}%",
+                "📊 Data coverage",
+                "green" if data_quality > 80 else "yellow", "🔧"
+            )
+        
+        with col2:
+            render_clean_metric(
+                "Active Systems",
+                f"{data_available}/3",
+                "⚡ Online modules",
+                "green", "📡"
+            )
+        
+        with col3:
+            total_cost = fuel_stats.get('total_cost_rands', 0)
+            solar_value = solar_stats.get('total_value_rands', 0)
+            render_clean_metric(
+                "Net Energy Cost",
+                f"R {total_cost - solar_value:,.0f}",
+                f"💰 After solar savings",
+                "blue", "💸"
+            )
+        
+        with col4:
+            render_clean_metric(
+                "Data Freshness",
+                "Live",
+                f"🕐 {datetime.now().strftime('%H:%M')}",
+                "green", "📊"
+            )
+
+if __name__ == "__main__":
+    main()
+# ==============================================================================
+# GENERATOR EFFICIENCY & RUNTIME TRACKING - NEW ENHANCEMENTS
+# ==============================================================================
