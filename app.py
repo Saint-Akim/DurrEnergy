@@ -3212,22 +3212,52 @@ def main():
         else:
             st.info("📊 No generator data available for selected period")
     
-    # Solar Performance Analysis - REDESIGNED 2025-12-29
+    # Solar Performance Analysis - SIMPLIFIED
     with tab2:
-        try:
-            from solar_tab_redesigned import render_solar_performance_tab
-            render_solar_performance_tab()
-        except ImportError as e:
-            st.error(f"❌ Solar performance module not available: {e}")
-            st.header("☀️ Solar Performance")
-            st.markdown("**System analysis temporarily unavailable**")
-            st.markdown("Please ensure solar_tab_redesigned.py and solar_analysis_production.py are present.")
-        except Exception as e:
-            st.error(f"❌ Solar performance system error: {e}")
-            st.header("☀️ Solar Performance")
-            st.markdown("**System analysis temporarily unavailable**")
-            import traceback
-            st.code(traceback.format_exc())
+        st.header("☀️ Solar Performance")
+        st.markdown("**Solar system monitoring**")
+        
+        # Simple solar display without the detailed comparison
+        if not daily_solar.empty:
+            st.markdown("### 📊 Current Solar Performance")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                render_clean_metric(
+                    "Total Generation",
+                    f"{solar_stats.get('total_generation_kwh', 0):,.1f} kWh",
+                    f"📊 Period: {period_days} days",
+                    "green", "☀️"
+                )
+            
+            with col2:
+                render_clean_metric(
+                    "Average Daily",
+                    f"{solar_stats.get('average_daily_kwh', 0):,.1f} kWh",
+                    f"⚡ Per day average",
+                    "blue", "📈"
+                )
+            
+            with col3:
+                render_clean_metric(
+                    "Peak Power",
+                    f"{solar_stats.get('peak_system_power_kw', 0):.1f} kW",
+                    f"🔋 Maximum output",
+                    "purple", "⚡"
+                )
+            
+            # Simple daily generation chart
+            if not daily_solar.empty:
+                st.markdown("### 📈 Daily Solar Generation")
+                
+                fig, df_chart = create_ultra_interactive_chart(
+                    daily_solar, 'date', 'total_kwh',
+                    'Daily Solar Generation (kWh)', '#10b981', 'area',
+                    height=400, enable_zoom=True, selection_mode=selection_mode
+                )
+        else:
+            st.info("📊 No solar data available for selected period")
     # Data Health panel and summary downloads in System Overview tab
     with tab4:
         st.markdown("## 🩺 Data Health & System Overview")
