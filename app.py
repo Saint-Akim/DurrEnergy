@@ -1515,7 +1515,10 @@ def render_generator_efficiency_section(gen_df, start_date, end_date):
     avg_eff = efficiency_df['state'].mean()
     max_eff = efficiency_df['state'].max()
     best_eff_date = efficiency_df.loc[efficiency_df['state'].idxmax(), 'last_changed']
-    days_since_best = (pd.Timestamp.now() - best_eff_date).days
+    # Convert to timezone-naive for comparison
+    if hasattr(best_eff_date, 'tz_localize'):
+        best_eff_date = best_eff_date.tz_localize(None)
+    days_since_best = (pd.Timestamp.now().tz_localize(None) - best_eff_date).days
     
     # Display metrics
     col1, col2, col3, col4 = st.columns(4)
