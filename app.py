@@ -46,17 +46,19 @@ st.set_page_config(
 )
 
 def apply_ultra_modern_styling():
-    """Ultra-modern styling with glassmorphism and advanced animations"""
+    """Ultra-modern styling with glassmorphism and advanced animations - ENHANCED VERSION"""
     st.markdown("""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
             @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
             
             :root {
                 --bg-primary: #0a0d1a;
                 --bg-secondary: #111827;
                 --bg-card: rgba(30, 41, 59, 0.7);
                 --bg-glass: rgba(255, 255, 255, 0.03);
+                --bg-glass-strong: rgba(255, 255, 255, 0.08);
                 --text-primary: #ffffff;
                 --text-secondary: #f1f5f9;
                 --text-muted: #94a3b8;
@@ -66,13 +68,16 @@ def apply_ultra_modern_styling():
                 --accent-cyan: #06b6d4;
                 --accent-red: #ef4444;
                 --accent-yellow: #f59e0b;
+                --accent-orange: #f97316;
                 --border: rgba(148, 163, 184, 0.1);
                 --border-hover: rgba(148, 163, 184, 0.2);
                 --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.37);
+                --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.3);
                 --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 --gradient-success: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
                 --gradient-warning: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
                 --gradient-purple: linear-gradient(135deg, #c471ed 0%, #f64f59 100%);
+                --gradient-blue-green: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
             }
             
             .stApp {
@@ -266,6 +271,295 @@ def apply_ultra_modern_styling():
                 font-size: 2.5rem;
                 line-height: 1.2;
             }
+            
+            /* ========== NEW UI ENHANCEMENTS ========== */
+            
+            /* Animated Status Badges */
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 16px;
+                background: var(--bg-glass-strong);
+                backdrop-filter: blur(20px);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                animation: pulse 2s ease-in-out infinite;
+            }
+            
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.7; }
+            }
+            
+            /* Enhanced Metric Cards with Sparklines */
+            .metric-enhanced {
+                background: var(--bg-glass-strong);
+                backdrop-filter: blur(20px);
+                border: 1px solid var(--border);
+                border-radius: 20px;
+                padding: 24px;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .metric-enhanced:hover {
+                transform: translateY(-4px);
+                border-color: var(--accent-blue);
+                box-shadow: var(--shadow-glow);
+            }
+            
+            .metric-enhanced::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 4px;
+                height: 100%;
+                background: var(--gradient-blue-green);
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+            
+            .metric-enhanced:hover::before {
+                opacity: 1;
+            }
+            
+            /* Quick Action Buttons */
+            .quick-action-btn {
+                background: var(--bg-glass-strong) !important;
+                backdrop-filter: blur(20px);
+                border: 1px solid var(--border) !important;
+                border-radius: 14px !important;
+                padding: 14px 24px !important;
+                color: var(--text-secondary) !important;
+                font-weight: 600 !important;
+                font-size: 0.9rem !important;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .quick-action-btn:hover {
+                transform: translateY(-2px) !important;
+                border-color: var(--accent-blue) !important;
+                box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3) !important;
+            }
+            
+            /* Improved Sidebar Styling */
+            .css-1d391kg, [data-testid="stSidebar"] {
+                background: linear-gradient(180deg, rgba(10, 13, 26, 0.95) 0%, rgba(17, 24, 39, 0.98) 100%) !important;
+                backdrop-filter: blur(30px);
+                border-right: 1px solid var(--border);
+            }
+            
+            [data-testid="stSidebar"] .stMarkdown {
+                padding: 0.5rem 0;
+            }
+            
+            /* Sidebar Section Headers */
+            .sidebar-section {
+                background: var(--bg-glass);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 16px;
+                margin: 12px 0;
+            }
+            
+            /* Enhanced Expanders */
+            .streamlit-expanderHeader {
+                background: var(--bg-glass-strong) !important;
+                border: 1px solid var(--border) !important;
+                border-radius: 12px !important;
+                padding: 12px 16px !important;
+                font-weight: 600 !important;
+                transition: all 0.3s ease !important;
+            }
+            
+            .streamlit-expanderHeader:hover {
+                border-color: var(--accent-blue) !important;
+                background: rgba(59, 130, 246, 0.1) !important;
+            }
+            
+            /* Floating Action Button */
+            .floating-action {
+                position: fixed;
+                bottom: 32px;
+                right: 32px;
+                width: 60px;
+                height: 60px;
+                background: var(--gradient-primary);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 8px 32px rgba(102, 126, 234, 0.5);
+                cursor: pointer;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                z-index: 1000;
+            }
+            
+            .floating-action:hover {
+                transform: scale(1.1) rotate(90deg);
+                box-shadow: 0 12px 48px rgba(102, 126, 234, 0.7);
+            }
+            
+            /* Improved Loading Animation */
+            .stSpinner > div {
+                border-color: var(--accent-blue) transparent transparent transparent !important;
+            }
+            
+            /* Enhanced Alert Boxes */
+            .stAlert {
+                background: var(--bg-glass-strong) !important;
+                backdrop-filter: blur(20px) !important;
+                border: 1px solid var(--border) !important;
+                border-radius: 16px !important;
+                padding: 16px 20px !important;
+            }
+            
+            /* Info Box Enhancement */
+            [data-testid="stInfo"] {
+                background: rgba(59, 130, 246, 0.1) !important;
+                border-left: 4px solid var(--accent-blue) !important;
+            }
+            
+            /* Success Box Enhancement */
+            [data-testid="stSuccess"] {
+                background: rgba(16, 185, 129, 0.1) !important;
+                border-left: 4px solid var(--accent-green) !important;
+            }
+            
+            /* Warning Box Enhancement */
+            [data-testid="stWarning"] {
+                background: rgba(245, 158, 11, 0.1) !important;
+                border-left: 4px solid var(--accent-yellow) !important;
+            }
+            
+            /* Error Box Enhancement */
+            [data-testid="stError"] {
+                background: rgba(239, 68, 68, 0.1) !important;
+                border-left: 4px solid var(--accent-red) !important;
+            }
+            
+            /* Smooth Scrollbar */
+            ::-webkit-scrollbar {
+                width: 10px;
+                height: 10px;
+            }
+            
+            ::-webkit-scrollbar-track {
+                background: var(--bg-secondary);
+                border-radius: 10px;
+            }
+            
+            ::-webkit-scrollbar-thumb {
+                background: var(--bg-glass-strong);
+                border-radius: 10px;
+                border: 2px solid var(--bg-secondary);
+            }
+            
+            ::-webkit-scrollbar-thumb:hover {
+                background: var(--accent-blue);
+            }
+            
+            /* Responsive Typography */
+            @media (max-width: 768px) {
+                .gradient-text {
+                    font-size: 1.8rem;
+                }
+                
+                .stTabs [data-baseweb="tab"] {
+                    padding: 12px 20px;
+                    font-size: 0.85rem;
+                }
+                
+                .metric-card-modern {
+                    padding: 20px;
+                }
+            }
+            
+            /* Chart Container Enhancement */
+            .js-plotly-plot {
+                border-radius: 16px;
+                overflow: hidden;
+            }
+            
+            /* Data Table Styling */
+            .dataframe {
+                background: var(--bg-glass) !important;
+                border: 1px solid var(--border) !important;
+                border-radius: 12px !important;
+                overflow: hidden;
+            }
+            
+            .dataframe th {
+                background: var(--bg-glass-strong) !important;
+                color: var(--text-primary) !important;
+                font-weight: 600 !important;
+                padding: 12px !important;
+                border-bottom: 1px solid var(--border) !important;
+            }
+            
+            .dataframe td {
+                padding: 10px !important;
+                border-bottom: 1px solid var(--border) !important;
+                color: var(--text-secondary) !important;
+            }
+            
+            /* Toggle Switch Style */
+            .stCheckbox {
+                padding: 8px 0;
+            }
+            
+            /* Radio Button Enhancement */
+            .stRadio > label {
+                background: var(--bg-glass);
+                padding: 10px 16px;
+                border-radius: 10px;
+                margin: 4px 0;
+                transition: all 0.2s ease;
+            }
+            
+            .stRadio > label:hover {
+                background: var(--bg-glass-strong);
+                border-color: var(--accent-blue);
+            }
+            
+            /* Tooltip Enhancement */
+            .tooltip {
+                position: relative;
+                display: inline-block;
+            }
+            
+            .tooltip .tooltiptext {
+                visibility: hidden;
+                background: var(--bg-glass-strong);
+                backdrop-filter: blur(20px);
+                border: 1px solid var(--border);
+                color: var(--text-primary);
+                text-align: center;
+                border-radius: 8px;
+                padding: 8px 12px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%;
+                left: 50%;
+                transform: translateX(-50%);
+                opacity: 0;
+                transition: opacity 0.3s;
+                font-size: 0.85rem;
+            }
+            
+            .tooltip:hover .tooltiptext {
+                visibility: visible;
+                opacity: 1;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -367,6 +661,145 @@ def render_clean_metric(label, value, delta=None, color="blue", icon="📊", des
                 delta=delta,
                 help=description
             )
+
+# ==============================================================================
+# NEW UI ENHANCEMENT FUNCTIONS
+# ==============================================================================
+
+def render_status_badge(text, status="live", icon="🟢"):
+    """Render an animated status badge"""
+    status_colors = {
+        "live": "#10b981",
+        "warning": "#f59e0b", 
+        "error": "#ef4444",
+        "info": "#3b82f6",
+        "offline": "#6b7280"
+    }
+    color = status_colors.get(status, "#3b82f6")
+    
+    st.markdown(f"""
+        <div class="status-badge" style="border-left: 3px solid {color};">
+            <span style="font-size: 1.2rem;">{icon}</span>
+            <span>{text}</span>
+        </div>
+    """, unsafe_allow_html=True)
+
+def render_enhanced_metric(label, value, delta=None, icon="📊", trend_data=None, color="#3b82f6"):
+    """Enhanced metric card with sparkline and better visual hierarchy"""
+    delta_html = ""
+    if delta:
+        delta_color = "#10b981" if isinstance(delta, str) and "+" in str(delta) else "#ef4444"
+        delta_html = f'<div style="color: {delta_color}; font-size: 0.9rem; font-weight: 600; margin-top: 8px;">{delta}</div>'
+    
+    sparkline_html = ""
+    if trend_data and len(trend_data) > 0:
+        # Create simple sparkline using Unicode characters
+        max_val = max(trend_data) if max(trend_data) > 0 else 1
+        bars = [int((val / max_val) * 8) for val in trend_data]
+        spark_chars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+        sparkline = ''.join([spark_chars[min(b, 7)] for b in bars])
+        sparkline_html = f'<div style="color: {color}; font-size: 1.2rem; margin-top: 8px; letter-spacing: 2px;">{sparkline}</div>'
+    
+    st.markdown(f"""
+        <div class="metric-enhanced">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <span style="font-size: 2rem;">{icon}</span>
+                <span style="color: #94a3b8; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">{label}</span>
+            </div>
+            <div style="font-size: 2rem; font-weight: 700; color: #f1f5f9; font-family: 'Poppins', sans-serif;">{value}</div>
+            {delta_html}
+            {sparkline_html}
+        </div>
+    """, unsafe_allow_html=True)
+
+def render_quick_action_panel():
+    """Render a quick action panel for common tasks"""
+    st.markdown("### ⚡ Quick Actions")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("📊 Export Data", key="qa_export", use_container_width=True):
+            st.info("Export functionality - Coming soon!")
+    
+    with col2:
+        if st.button("📈 Generate Report", key="qa_report", use_container_width=True):
+            st.info("Report generation - Coming soon!")
+    
+    with col3:
+        if st.button("🔄 Refresh Data", key="qa_refresh", use_container_width=True):
+            st.cache_data.clear()
+            st.success("Cache cleared! Data will refresh.")
+            st.rerun()
+    
+    with col4:
+        if st.button("⚙️ Settings", key="qa_settings", use_container_width=True):
+            st.info("Settings panel - Coming soon!")
+
+def render_info_card(title, content, icon="ℹ️", color="#3b82f6"):
+    """Render an informational card"""
+    st.markdown(f"""
+        <div style="
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid {color};
+            border-radius: 12px;
+            padding: 20px;
+            margin: 16px 0;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                <span style="font-size: 1.5rem;">{icon}</span>
+                <span style="font-size: 1.1rem; font-weight: 600; color: #f1f5f9;">{title}</span>
+            </div>
+            <div style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
+                {content}
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+def render_sidebar_section(title, icon="📌"):
+    """Render a styled sidebar section header"""
+    st.markdown(f"""
+        <div class="sidebar-section">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.3rem;">{icon}</span>
+                <span style="font-size: 1rem; font-weight: 700; color: #f1f5f9;">{title}</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+def render_data_quality_indicator(quality_score):
+    """Render a data quality indicator"""
+    if quality_score >= 90:
+        color = "#10b981"
+        status = "Excellent"
+        icon = "🟢"
+    elif quality_score >= 70:
+        color = "#f59e0b"
+        status = "Good"
+        icon = "🟡"
+    else:
+        color = "#ef4444"
+        status = "Poor"
+        icon = "🔴"
+    
+    st.markdown(f"""
+        <div style="
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-glass-strong);
+            border-left: 4px solid {color};
+            border-radius: 12px;
+            margin: 12px 0;
+        ">
+            <span style="font-size: 1.5rem;">{icon}</span>
+            <div>
+                <div style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">Data Quality</div>
+                <div style="font-size: 1.1rem; color: {color}; font-weight: 700;">{quality_score}% - {status}</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # ENHANCED FUEL ANALYSIS WITH REAL PRICING
@@ -1022,23 +1455,35 @@ def create_ultra_interactive_chart(df, x_col, y_col, title, color="#3b82f6", cha
 # ==============================================================================
 
 def main():
-    """Ultra-modern improved main application"""
+    """Ultra-modern improved main application - ENHANCED UI VERSION"""
     
-    # Ultra-modern header (FIXED TITLE)
-    # Clean header with native Streamlit
-    st.title("🏭 Durr Bottling Energy Intelligence")
-    st.markdown("**Ultra-Modern Interactive Energy Monitoring Platform with Real-Time Pricing & 3-Inverter System**")
+    # Enhanced header with status badges
+    col_title, col_status = st.columns([3, 1])
     
-    # Feature badges using clean columns
+    with col_title:
+        st.title("🏭 Durr Bottling Energy Intelligence")
+        st.markdown("**Ultra-Modern Interactive Energy Monitoring Platform with Real-Time Pricing & 3-Inverter System**")
+    
+    with col_status:
+        render_status_badge("System Live", "live", "🟢")
+        st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+    
+    # Enhanced feature badges with better styling
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.info("🎯 Version 10.0 Enhanced")
+        render_enhanced_metric("Version", "10.0", icon="🎯", color="#3b82f6")
     with col2:
-        st.error("💰 Real Fuel Pricing") 
+        render_enhanced_metric("Pricing", "Real-Time", icon="💰", color="#10b981")
     with col3:
-        st.success("☀️ 3-Inverter System")
+        render_enhanced_metric("Solar System", "3-Inverter", icon="☀️", color="#f59e0b")
     with col4:
-        st.warning("📅 Interactive Date Range")
+        render_enhanced_metric("Status", "Enhanced", icon="✨", color="#8b5cf6")
+    
+    st.markdown("---")
+    
+    # Quick Action Panel
+    with st.expander("⚡ Quick Actions", expanded=False):
+        render_quick_action_panel()
     
     # Silent data loading
     all_data = load_all_energy_data_silent()
