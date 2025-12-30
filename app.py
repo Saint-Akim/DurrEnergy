@@ -35,6 +35,18 @@ except ImportError:
     SOLAR_ANALYSIS_AVAILABLE = False
     print("⚠️ Professional solar analysis module not available - using fallback")
 
+# Import user-friendly helpers
+try:
+    from user_friendly_helpers import (
+        render_friendly_section, render_friendly_metric, show_friendly_message,
+        render_quick_tip, render_friendly_date_picker, render_glossary,
+        explain_comparison, FRIENDLY_EXPLANATIONS
+    )
+    USER_FRIENDLY_MODE = True
+except ImportError:
+    USER_FRIENDLY_MODE = False
+    print("⚠️ User-friendly helpers not available")
+
 # ==============================================================================
 # ULTRA-MODERN PAGE CONFIGURATION
 # ==============================================================================
@@ -715,26 +727,27 @@ def render_enhanced_metric(label, value, delta=None, icon="📊", trend_data=Non
 def render_quick_action_panel():
     """Render a quick action panel for common tasks"""
     st.markdown("### ⚡ Quick Actions")
+    st.caption("Helpful tools to manage your dashboard")
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if st.button("📊 Export Data", key="qa_export", use_container_width=True):
-            st.info("Export functionality - Coming soon!")
+        if st.button("📊 Export Data", key="qa_export", use_container_width=True, help="Download your data to Excel or PDF"):
+            st.info("💡 Export feature coming soon! You'll be able to download all your data.")
     
     with col2:
-        if st.button("📈 Generate Report", key="qa_report", use_container_width=True):
-            st.info("Report generation - Coming soon!")
+        if st.button("📈 Create Report", key="qa_report", use_container_width=True, help="Generate a summary report"):
+            st.info("💡 Report feature coming soon! Get automatic summaries of your energy usage.")
     
     with col3:
-        if st.button("🔄 Refresh Data", key="qa_refresh", use_container_width=True):
+        if st.button("🔄 Refresh Data", key="qa_refresh", use_container_width=True, help="Update with the latest information"):
             st.cache_data.clear()
-            st.success("Cache cleared! Data will refresh.")
+            st.success("✅ Data refreshed! Showing you the latest information.")
             st.rerun()
     
     with col4:
-        if st.button("⚙️ Settings", key="qa_settings", use_container_width=True):
-            st.info("Settings panel - Coming soon!")
+        if st.button("📖 Help Guide", key="qa_help", use_container_width=True, help="Learn how to use this dashboard"):
+            render_glossary()
 
 def render_info_card(title, content, icon="ℹ️", color="#3b82f6"):
     """Render an informational card"""
@@ -1224,42 +1237,51 @@ def filter_data_by_date_range(df, date_col, start_date, end_date):
 # ==============================================================================
 
 def create_date_range_selector(key_prefix="global"):
-    """Advanced date range selector"""
+    """Simple date range selector for everyone"""
     
-    st.markdown("### 📅 Interactive Date Range Selection")
+    st.markdown("### 📅 Choose Your Dates")
+    st.caption("Pick which time period you want to see")
     
     col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
         preset = st.selectbox(
-            "Quick Select Period",
+            "Choose a time period",
             [
-                "Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 60 Days", 
-                "Last 90 Days", "Last 6 Months", "Year to Date", "All Time", "Custom Range"
+                "Last 7 Days (This Week)", 
+                "Last 14 Days (Two Weeks)", 
+                "Last 30 Days (This Month)", 
+                "Last 60 Days (Two Months)", 
+                "Last 90 Days (Three Months)", 
+                "Last 6 Months", 
+                "This Year", 
+                "All Available Data", 
+                "Pick My Own Dates"
             ],
             index=2,
-            key=f"{key_prefix}_preset"
+            key=f"{key_prefix}_preset",
+            help="Choose how far back you want to look at your data"
         )
     
     today = datetime.now().date()
     
-    if preset == "Last 7 Days":
+    if "7 Days" in preset:
         start_date, end_date = today - timedelta(days=6), today
-    elif preset == "Last 14 Days":
+    elif "14 Days" in preset:
         start_date, end_date = today - timedelta(days=13), today
-    elif preset == "Last 30 Days":
+    elif "30 Days" in preset:
         start_date, end_date = today - timedelta(days=29), today
-    elif preset == "Last 60 Days":
+    elif "60 Days" in preset:
         start_date, end_date = today - timedelta(days=59), today
-    elif preset == "Last 90 Days":
+    elif "90 Days" in preset:
         start_date, end_date = today - timedelta(days=89), today
-    elif preset == "Last 6 Months":
+    elif "6 Months" in preset:
         start_date, end_date = today - timedelta(days=180), today
-    elif preset == "Year to Date":
+    elif "This Year" in preset:
         start_date, end_date = date(today.year, 1, 1), today
-    elif preset == "All Time":
+    elif "All Available" in preset:
         start_date, end_date = date(2020, 1, 1), today
-    else:  # Custom Range
+    else:  # Pick My Own Dates
         with col2:
             start_date = st.date_input(
                 "From",
@@ -1276,14 +1298,14 @@ def create_date_range_selector(key_prefix="global"):
                 key=f"{key_prefix}_end"
             )
     
-    if preset != "Custom Range":
+    if "Pick My Own" not in preset:
         with col2:
-            st.date_input("From", value=start_date, disabled=True, key=f"{key_prefix}_start_display")
+            st.date_input("Start Date", value=start_date, disabled=True, key=f"{key_prefix}_start_display")
         with col3:
-            st.date_input("To", value=end_date, disabled=True, key=f"{key_prefix}_end_display")
+            st.date_input("End Date", value=end_date, disabled=True, key=f"{key_prefix}_end_display")
     
     period_days = (end_date - start_date).days + 1
-    st.info(f"📊 **Selected Period**: {period_days} days • **From**: {start_date} **To**: {end_date}")
+    st.success(f"✅ **Showing {period_days} days** • From {start_date.strftime('%B %d, %Y')} to {end_date.strftime('%B %d, %Y')}")
     
     return start_date, end_date, period_days
 
@@ -1461,23 +1483,21 @@ def main():
     col_title, col_status = st.columns([3, 1])
     
     with col_title:
-        st.title("🏭 Durr Bottling Energy Intelligence")
-        st.markdown("**Ultra-Modern Interactive Energy Monitoring Platform with Real-Time Pricing & 3-Inverter System**")
+        st.title("🏭 Durr Bottling Energy Dashboard")
+        st.markdown("**Track your energy usage and costs in simple, easy-to-understand charts**")
     
     with col_status:
         render_status_badge("System Live", "live", "🟢")
         st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
     
-    # Enhanced feature badges with better styling
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        render_enhanced_metric("Version", "10.0", icon="🎯", color="#3b82f6")
-    with col2:
-        render_enhanced_metric("Pricing", "Real-Time", icon="💰", color="#10b981")
-    with col3:
-        render_enhanced_metric("Solar System", "3-Inverter", icon="☀️", color="#f59e0b")
-    with col4:
-        render_enhanced_metric("Status", "Enhanced", icon="✨", color="#8b5cf6")
+    # Welcome message for non-technical users
+    st.info("""
+        👋 **Welcome!** This dashboard shows you:
+        - 🔥 **Diesel Usage** - How much fuel your generator uses and costs
+        - ☀️ **Solar Power** - Free electricity from your solar panels
+        - ⚡ **Factory Electricity** - How much power your factory consumes
+        - 💰 **Costs & Savings** - Where your money goes and how you can save
+    """)
     
     st.markdown("---")
     
@@ -1676,7 +1696,8 @@ def main():
                     st.download_button("Runtime/Efficiency CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="fuel_runtime_efficiency.csv", mime="text/csv", key="dl_runtime_efficiency_top")
 
             # Enhanced fuel analysis charts
-            st.markdown("### 📊 Enhanced Fuel Consumption Analysis")
+            st.markdown("### 📊 Fuel Usage Summary")
+            st.caption("Here's what your generator used during this time period")
             
             col1, col2 = st.columns(2)
             
