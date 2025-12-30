@@ -915,11 +915,12 @@ def calculate_enhanced_fuel_analysis(gen_df, fuel_history_df, fuel_purchases_df,
         primary_val = daily_primary.get(date, 0)
         backup_val = daily_backup.get(date, 0)
         
-        # Use primary if it has reasonable consumption (>0.1L), otherwise use backup
-        if primary_val > 0.1:
-            daily_combined[date] = primary_val
-        elif backup_val > 0.1:
-            daily_combined[date] = backup_val  
+        # FIXED: Use backup (dense data - 167 readings/day) as primary source
+        # Backup source is more reliable with 57,499 records vs primary's 186 records
+        if backup_val > 0.1:  # Dense source (167 readings/day) - USE THIS FIRST
+            daily_combined[date] = backup_val
+        elif primary_val > 0.1:  # Sparse source (0.5 readings/day) - fallback only
+            daily_combined[date] = primary_val  
         else:
             daily_combined[date] = max(primary_val, backup_val)  # Use whichever is higher for very small values
     
@@ -1629,12 +1630,13 @@ def main():
             start_date, end_date
         )
     
-    # Enhanced tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # Enhanced tabs with Data Quality tab
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🔋 Generator Fuel Analysis", 
         "☀️ Solar Performance", 
         "🏭 Factory Optimization",
-        "📊 System Overview"
+        "📊 System Overview",
+        "🩺 Data Quality"
     ])
     
     # Generator Analysis Tab (ENHANCED WITH REAL PRICING)
@@ -1647,24 +1649,36 @@ def main():
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
+                total_fuel = fuel_stats['total_fuel_liters']
                 render_clean_metric(
                     "Total Fuel Consumed",
-                    f"{fuel_stats['total_fuel_liters']:,.1f} L",
+                    f"{total_fuel:,.1f} L",
                     f"📈 Real pricing used",
                     "blue", "⛽",
                     f"Period: {period_days} days • Market prices applied",
                     fuel_stats.get('fuel_consumption_trend', [])
                 )
+                # Add business context badge
+                daily_avg = total_fuel / max(period_days, 1)
+                context_html = add_business_context_badge('fuel_daily_liters', daily_avg)
+                if context_html:
+                    st.markdown(context_html, unsafe_allow_html=True)
             
             with col2:
+                total_cost = fuel_stats['total_cost_rands']
                 render_clean_metric(
                     "Total Fuel Cost",
-                    f"R {fuel_stats['total_cost_rands']:,.0f}",
+                    f"R {total_cost:,.0f}",
                     f"💰 R{fuel_stats['average_cost_per_liter']:.2f}/L market avg",
                     "red", "💸",
                     "Based on actual purchase prices",
                     fuel_stats.get('cost_trend', [])
                 )
+                # Add business context badge
+                daily_cost = total_cost / max(period_days, 1)
+                context_html = add_business_context_badge('fuel_cost_daily', daily_cost)
+                if context_html:
+                    st.markdown(context_html, unsafe_allow_html=True)
             
             with col3:
                 efficiency = fuel_stats.get('average_efficiency', 0)
@@ -1695,6 +1709,37 @@ def main():
                 with c3:
                     st.download_button("Runtime/Efficiency CSV", daily_fuel.to_csv(index=False).encode('utf-8'), file_name="fuel_runtime_efficiency.csv", mime="text/csv", key="dl_runtime_efficiency_top")
 
+            # Add new analysis sections BEFORE charts
+            st.markdown("---")
+            
+            # Generator Efficiency Section
+            render_generator_efficiency_section(
+                all_data.get('generator', pd.DataFrame()),
+                start_date, 
+                end_date
+            )
+            
+            st.markdown("---")
+            
+            # Runtime Analysis Section
+            render_runtime_analysis_section(
+                all_data.get('generator', pd.DataFrame()),
+                start_date,
+                end_date
+            )
+            
+            st.markdown("---")
+            
+            # Fuel Tank Analysis Section
+            render_fuel_tank_analysis_section(
+                all_data.get('generator', pd.DataFrame()),
+                all_data.get('fuel_history', pd.DataFrame()),
+                start_date,
+                end_date
+            )
+            
+            st.markdown("---")
+            
             # Enhanced fuel analysis charts
             st.markdown("### 📊 Fuel Usage Summary")
             st.caption("Here's what your generator used during this time period")
@@ -2020,3 +2065,1260 @@ def main():
 
 if __name__ == "__main__":
     main()
+# ==============================================================================
+# GENERATOR EFFICIENCY & RUNTIME TRACKING - NEW ENHANCEMENTS
+# ==============================================================================
+
+def render_generator_efficiency_section(gen_df, start_date, end_date):
+    """Render generator efficiency analysis with maintenance tracking"""
+    
+    st.markdown("### ⚙️ Generator Efficiency Analysis")
+    st.caption("Track your generator's performance and maintenance needs")
+    
+    if gen_df.empty:
+        st.info("📊 No generator efficiency data available")
+        return
+    
+    # Filter data
+    gen_filtered = filter_data_by_date_range(gen_df, 'last_changed', start_date, end_date)
+    
+    # Extract efficiency data
+    efficiency_df = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_fuel_efficiency'].copy()
+    
+    if efficiency_df.empty:
+        st.info("📊 Generator efficiency sensor data not available")
+        return
+    
+    efficiency_df['last_changed'] = pd.to_datetime(efficiency_df['last_changed'])
+    efficiency_df['state'] = pd.to_numeric(efficiency_df['state'], errors='coerce')
+    efficiency_df = efficiency_df.dropna(subset=['state'])
+    efficiency_df = efficiency_df.sort_values('last_changed')
+    
+    if len(efficiency_df) == 0:
+        st.info("📊 No valid efficiency readings")
+        return
+    
+    # Calculate metrics
+    current_eff = efficiency_df['state'].iloc[-1]
+    avg_eff = efficiency_df['state'].mean()
+    max_eff = efficiency_df['state'].max()
+    best_eff_date = efficiency_df.loc[efficiency_df['state'].idxmax(), 'last_changed']
+    days_since_best = (datetime.now() - best_eff_date).days
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        # Performance grade
+        if current_eff > 35:
+            grade = "🟢 Excellent"
+            grade_color = "#10b981"
+            status_msg = "Generator running optimally"
+        elif current_eff > 25:
+            grade = "🟡 Good"
+            grade_color = "#f59e0b"
+            status_msg = "Normal operation"
+        else:
+            grade = "🔴 Poor"
+            grade_color = "#ef4444"
+            status_msg = "Maintenance needed"
+        
+        st.metric(
+            "Current Efficiency",
+            f"{current_eff:.1f}%",
+            delta=f"{current_eff - avg_eff:.1f}% vs avg",
+            help="Generator fuel efficiency - target >35%"
+        )
+        st.markdown(f"<div style='color: {grade_color}; font-weight: 600;'>{grade}</div>", unsafe_allow_html=True)
+        st.caption(status_msg)
+    
+    with col2:
+        st.metric(
+            "Average Efficiency",
+            f"{avg_eff:.1f}%",
+            help="Long-term average efficiency"
+        )
+        st.caption("Performance baseline")
+    
+    with col3:
+        st.metric(
+            "Peak Efficiency",
+            f"{max_eff:.1f}%",
+            help="Best recorded efficiency"
+        )
+        st.caption(f"Achieved: {best_eff_date.strftime('%b %d, %Y')}")
+    
+    with col4:
+        st.metric(
+            "Days Since Peak",
+            f"{days_since_best}",
+            help="Time since best efficiency"
+        )
+        if days_since_best > 90:
+            st.warning("⚠️ Schedule maintenance")
+        elif days_since_best > 60:
+            st.info("💡 Consider service soon")
+        else:
+            st.success("✅ Recent peak")
+    
+    # Efficiency trend chart
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=efficiency_df['last_changed'],
+        y=efficiency_df['state'],
+        name='Efficiency',
+        mode='lines+markers',
+        line=dict(color='#f59e0b', width=2),
+        marker=dict(size=4),
+        hovertemplate="<b>%{x|%b %d, %Y %H:%M}</b><br>Efficiency: %{y:.1f}%<extra></extra>"
+    ))
+    
+    # Add performance bands
+    fig.add_hrect(y0=35, y1=100, fillcolor="green", opacity=0.1, 
+                  annotation_text="Excellent (>35%)", annotation_position="top left")
+    fig.add_hrect(y0=25, y1=35, fillcolor="yellow", opacity=0.1, 
+                  annotation_text="Good (25-35%)", annotation_position="top left")
+    fig.add_hrect(y0=0, y1=25, fillcolor="red", opacity=0.1, 
+                  annotation_text="Poor (<25%) - Service Needed", annotation_position="bottom left")
+    
+    fig.update_layout(
+        title="Generator Efficiency Trend Over Time",
+        xaxis_title="Date",
+        yaxis_title="Efficiency (%)",
+        template="plotly_dark",
+        height=450,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#e2e8f0', family="Inter"),
+        hovermode="x unified"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Business insights
+    with st.expander("💡 What This Means & How to Improve", expanded=False):
+        st.markdown(f"""
+        ### Understanding Generator Efficiency
+        
+        **Current Status: {grade}**
+        
+        Your generator is currently operating at **{current_eff:.1f}%** efficiency, which means:
+        - For every liter of diesel, you get **{current_eff:.1f}%** of the theoretical energy output
+        - **{100-current_eff:.1f}%** is lost to heat, friction, and inefficiencies
+        
+        ### Performance Bands
+        - **>35% (Excellent)**: Generator running optimally - no action needed
+        - **25-35% (Good)**: Normal operation - monitor trends
+        - **<25% (Poor)**: Maintenance needed immediately
+        
+        ### Why Efficiency Matters
+        - **Low efficiency = wasting fuel and money**
+        - A drop from 35% to 25% means **28% more fuel** for the same output
+        - On 100L/day, that's an extra **R560/day** or **R16,800/month** wasted!
+        
+        ### Action Items
+        """)
+        
+        if current_eff < 25:
+            st.error(f"""
+            🔴 **URGENT: Schedule Maintenance Immediately**
+            - Current efficiency: {current_eff:.1f}% (Poor)
+            - You're wasting approximately R{(35-current_eff)/35 * 100 * 20:.0f}/day on inefficiency
+            - Actions: Check air filters, fuel quality, engine compression
+            """)
+        elif current_eff < 30:
+            st.warning(f"""
+            🟡 **Maintenance Recommended Soon**
+            - Current efficiency: {current_eff:.1f}% (Fair)
+            - Consider: Oil change, filter replacement, fuel system check
+            - Potential savings: R{(35-current_eff)/35 * 100 * 20:.0f}/day after service
+            """)
+        else:
+            st.success(f"""
+            ✅ **Generator Running Well**
+            - Current efficiency: {current_eff:.1f}% (Good)
+            - Keep up preventive maintenance schedule
+            - Next service: Every 250 operating hours or 3 months
+            """)
+        
+        # Efficiency decline analysis
+        if len(efficiency_df) > 30:
+            recent_30d = efficiency_df.tail(30)['state'].mean()
+            older_30d = efficiency_df.head(30)['state'].mean()
+            trend = recent_30d - older_30d
+            
+            if trend < -5:
+                st.warning(f"""
+                📉 **Declining Trend Detected**
+                - Efficiency dropped {abs(trend):.1f}% over period
+                - This indicates wear or maintenance needs
+                - Recommend: Schedule service before performance degrades further
+                """)
+            elif trend > 5:
+                st.success(f"""
+                📈 **Improving Trend**
+                - Efficiency improved {trend:.1f}% over period
+                - Recent maintenance is working!
+                """)
+    
+    # Download efficiency data
+    st.download_button(
+        "⬇️ Download Efficiency Data",
+        efficiency_df[['last_changed', 'state']].to_csv(index=False).encode('utf-8'),
+        file_name=f"generator_efficiency_{start_date}_to_{end_date}.csv",
+        mime="text/csv",
+        key="dl_efficiency_data"
+    )
+
+
+def render_runtime_analysis_section(gen_df, start_date, end_date):
+    """Render generator runtime analysis with maintenance scheduling"""
+    
+    st.markdown("### ⏱️ Generator Runtime Analysis")
+    st.caption("Track operating hours and schedule maintenance")
+    
+    if gen_df.empty:
+        st.info("📊 No runtime data available")
+        return
+    
+    # Filter data
+    gen_filtered = filter_data_by_date_range(gen_df, 'last_changed', start_date, end_date)
+    
+    # Extract runtime data
+    runtime_df = gen_filtered[gen_filtered['entity_id'] == 'sensor.generator_runtime_duration'].copy()
+    
+    if runtime_df.empty:
+        st.info("📊 Runtime sensor data not available")
+        return
+    
+    runtime_df['last_changed'] = pd.to_datetime(runtime_df['last_changed'])
+    runtime_df['state'] = pd.to_numeric(runtime_df['state'], errors='coerce')
+    runtime_df = runtime_df.dropna(subset=['state'])
+    runtime_df = runtime_df.sort_values('last_changed')
+    
+    if len(runtime_df) == 0:
+        st.info("📊 No valid runtime readings")
+        return
+    
+    # Calculate metrics
+    total_hours = runtime_df['state'].sum()
+    avg_runtime = runtime_df['state'].mean()
+    max_runtime = runtime_df['state'].max()
+    service_interval = 250  # hours
+    hours_to_service = service_interval - (total_hours % service_interval)
+    service_percentage = (hours_to_service / service_interval) * 100
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "Total Runtime Hours",
+            f"{total_hours:.1f}h",
+            help="Cumulative generator operating hours in selected period"
+        )
+        st.caption(f"Over {len(runtime_df)} runs")
+    
+    with col2:
+        # Service urgency
+        if hours_to_service < 25:
+            service_status = "🔴 Due Soon"
+            service_color = "#ef4444"
+        elif hours_to_service < 50:
+            service_status = "🟡 Schedule"
+            service_color = "#f59e0b"
+        else:
+            service_status = "🟢 On Track"
+            service_color = "#10b981"
+        
+        st.metric(
+            "Hours to Next Service",
+            f"{hours_to_service:.0f}h",
+            delta=f"{service_percentage:.0f}% until service",
+            help="Service recommended every 250 hours"
+        )
+        st.markdown(f"<div style='color: {service_color}; font-weight: 600;'>{service_status}</div>", unsafe_allow_html=True)
+    
+    with col3:
+        st.metric(
+            "Average Run Duration",
+            f"{avg_runtime:.1f}h",
+            help="Average hours per generator run"
+        )
+        
+        if avg_runtime > 3:
+            st.warning("⚠️ Long runs detected")
+            st.caption("Check for frequent load shedding")
+        else:
+            st.success("✅ Normal duration")
+    
+    with col4:
+        st.metric(
+            "Longest Run",
+            f"{max_runtime:.1f}h",
+            help="Maximum continuous operating time"
+        )
+        
+        if max_runtime > 5:
+            st.info("💡 Extended operation detected")
+        else:
+            st.caption("Within normal limits")
+    
+    # Runtime pattern charts
+    col_chart1, col_chart2 = st.columns(2)
+    
+    with col_chart1:
+        # Daily runtime
+        runtime_df['date'] = runtime_df['last_changed'].dt.date
+        daily_runtime = runtime_df.groupby('date')['state'].sum().reset_index()
+        daily_runtime.columns = ['date', 'hours']
+        
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=daily_runtime['date'],
+            y=daily_runtime['hours'],
+            name='Daily Runtime',
+            marker_color='#8b5cf6',
+            hovertemplate="<b>%{x}</b><br>Runtime: %{y:.1f}h<extra></extra>"
+        ))
+        
+        fig.update_layout(
+            title="Daily Generator Runtime (Hours)",
+            xaxis_title="Date",
+            yaxis_title="Hours",
+            template="plotly_dark",
+            height=350,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e2e8f0')
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col_chart2:
+        # Runtime distribution
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(
+            x=runtime_df['state'],
+            nbinsx=20,
+            name='Run Duration Distribution',
+            marker_color='#06b6d4',
+            hovertemplate="Duration: %{x:.1f}h<br>Count: %{y}<extra></extra>"
+        ))
+        
+        fig.update_layout(
+            title="Runtime Distribution (Hours per Run)",
+            xaxis_title="Duration (hours)",
+            yaxis_title="Frequency",
+            template="plotly_dark",
+            height=350,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e2e8f0')
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Maintenance scheduler
+    with st.expander("🔧 Maintenance Scheduler & Insights", expanded=False):
+        st.markdown(f"""
+        ### Maintenance Schedule
+        
+        **Current Status:**
+        - Total runtime: **{total_hours:.1f} hours**
+        - Hours to next service: **{hours_to_service:.0f} hours**
+        - Service interval: Every **250 hours**
+        
+        ### Service Schedule
+        """)
+        
+        # Calculate upcoming services
+        services_needed = int(total_hours / service_interval) + 1
+        next_service_at = services_needed * service_interval
+        
+        service_col1, service_col2 = st.columns(2)
+        
+        with service_col1:
+            if hours_to_service < 25:
+                st.error(f"""
+                🔴 **SERVICE DUE SOON**
+                - Current: {total_hours:.0f}h
+                - Next service: {next_service_at}h
+                - Remaining: {hours_to_service:.0f}h
+                - **Action: Schedule service within next week**
+                """)
+            elif hours_to_service < 50:
+                st.warning(f"""
+                🟡 **SERVICE APPROACHING**
+                - Current: {total_hours:.0f}h
+                - Next service: {next_service_at}h
+                - Remaining: {hours_to_service:.0f}h
+                - **Action: Schedule service within 2-3 weeks**
+                """)
+            else:
+                st.success(f"""
+                ✅ **MAINTENANCE ON TRACK**
+                - Current: {total_hours:.0f}h
+                - Next service: {next_service_at}h
+                - Remaining: {hours_to_service:.0f}h
+                - **Status: No immediate action required**
+                """)
+        
+        with service_col2:
+            st.markdown("""
+            ### Standard Service Checklist
+            
+            **Every 250 Hours:**
+            - ✅ Oil and oil filter change
+            - ✅ Air filter inspection/replacement
+            - ✅ Fuel filter replacement
+            - ✅ Battery check
+            - ✅ Coolant level check
+            - ✅ Belt tension inspection
+            - ✅ General visual inspection
+            
+            **Estimated service cost: R2,500-4,000**
+            """)
+        
+        # Runtime pattern insights
+        st.markdown("### 📊 Runtime Pattern Analysis")
+        
+        # Calculate patterns
+        runs_per_day = len(runtime_df) / max((end_date - start_date).days, 1)
+        short_runs = len(runtime_df[runtime_df['state'] < 1])
+        long_runs = len(runtime_df[runtime_df['state'] > 3])
+        
+        pattern_col1, pattern_col2, pattern_col3 = st.columns(3)
+        
+        with pattern_col1:
+            st.metric("Avg Runs per Day", f"{runs_per_day:.1f}", help="Generator start frequency")
+            if runs_per_day > 3:
+                st.info("💡 Frequent starts - check grid stability")
+        
+        with pattern_col2:
+            st.metric("Short Runs (<1h)", f"{short_runs}", help="Brief power interruptions")
+            if short_runs > len(runtime_df) * 0.5:
+                st.info("💡 Many brief runs - grid instability")
+        
+        with pattern_col3:
+            st.metric("Extended Runs (>3h)", f"{long_runs}", help="Prolonged outages")
+            if long_runs > len(runtime_df) * 0.2:
+                st.warning("⚠️ Frequent extended outages")
+    
+    # Download runtime data
+    st.download_button(
+        "⬇️ Download Runtime Data",
+        runtime_df[['last_changed', 'state']].to_csv(index=False).encode('utf-8'),
+        file_name=f"generator_runtime_{start_date}_to_{end_date}.csv",
+        mime="text/csv",
+        key="dl_runtime_data"
+    )
+
+
+def render_fuel_tank_analysis_section(gen_df, fuel_history_df, start_date, end_date):
+    """Render fuel tank start/stop analysis for per-run consumption"""
+    
+    st.markdown("### ⛽ Per-Run Fuel Consumption Analysis")
+    st.caption("Track exact fuel usage for each generator run")
+    
+    if fuel_history_df.empty:
+        st.info("📊 No fuel tank level data available")
+        return
+    
+    # Filter data
+    fuel_filtered = filter_data_by_date_range(fuel_history_df, 'last_changed', start_date, end_date)
+    
+    # Extract start and stop levels
+    start_df = fuel_filtered[fuel_filtered['entity_id'] == 'sensor.generator_fuel_level_start'].copy()
+    stop_df = fuel_filtered[fuel_filtered['entity_id'] == 'sensor.generator_fuel_level_stop'].copy()
+    
+    if start_df.empty or stop_df.empty:
+        st.info("📊 Start/Stop fuel level sensors not available")
+        return
+    
+    # Process data
+    start_df['last_changed'] = pd.to_datetime(start_df['last_changed'])
+    stop_df['last_changed'] = pd.to_datetime(stop_df['last_changed'])
+    start_df['state'] = pd.to_numeric(start_df['state'], errors='coerce')
+    stop_df['state'] = pd.to_numeric(stop_df['state'], errors='coerce')
+    
+    start_df = start_df.dropna(subset=['state']).sort_values('last_changed')
+    stop_df = stop_df.dropna(subset=['state']).sort_values('last_changed')
+    
+    # Match start/stop pairs
+    merged = pd.merge_asof(
+        start_df,
+        stop_df,
+        on='last_changed',
+        direction='forward',
+        suffixes=('_start', '_stop'),
+        tolerance=pd.Timedelta('6 hours')  # Max 6 hours between start and stop
+    )
+    
+    # Calculate consumption per run
+    merged['consumption_per_run'] = merged['state_start'] - merged['state_stop']
+    merged['duration_hours'] = (merged['last_changed'] - merged['last_changed']).dt.total_seconds() / 3600
+    
+    # Filter valid runs (positive consumption, reasonable values)
+    valid_runs = merged[
+        (merged['consumption_per_run'] > 0) & 
+        (merged['consumption_per_run'] < 100)  # Max 100L per run
+    ].copy()
+    
+    if valid_runs.empty:
+        st.info("📊 No valid run data available for analysis")
+        return
+    
+    # Calculate metrics
+    avg_consumption = valid_runs['consumption_per_run'].mean()
+    total_consumption = valid_runs['consumption_per_run'].sum()
+    max_consumption = valid_runs['consumption_per_run'].max()
+    min_consumption = valid_runs['consumption_per_run'].min()
+    num_runs = len(valid_runs)
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "Average Per Run",
+            f"{avg_consumption:.1f}L",
+            help="Average fuel consumed per generator run"
+        )
+        st.caption(f"Based on {num_runs} runs")
+    
+    with col2:
+        st.metric(
+            "Total Consumption",
+            f"{total_consumption:.1f}L",
+            help="Total fuel consumed in tracked runs"
+        )
+        st.caption(f"{num_runs} complete runs")
+    
+    with col3:
+        st.metric(
+            "Highest Consumption",
+            f"{max_consumption:.1f}L",
+            help="Maximum fuel consumed in a single run"
+        )
+        if max_consumption > avg_consumption * 2:
+            st.warning("⚠️ Unusually high")
+    
+    with col4:
+        st.metric(
+            "Lowest Consumption",
+            f"{min_consumption:.1f}L",
+            help="Minimum fuel consumed in a single run"
+        )
+        st.caption("Shortest run")
+    
+    # Per-run consumption chart
+    valid_runs['date'] = valid_runs['last_changed'].dt.date
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=valid_runs['last_changed'],
+        y=valid_runs['consumption_per_run'],
+        mode='markers+lines',
+        name='Fuel per Run',
+        marker=dict(
+            size=8,
+            color=valid_runs['consumption_per_run'],
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title="Litres")
+        ),
+        line=dict(color='rgba(99, 102, 241, 0.3)', width=1),
+        hovertemplate="<b>%{x|%b %d, %Y %H:%M}</b><br>Fuel: %{y:.1f}L<extra></extra>"
+    ))
+    
+    # Add average line
+    fig.add_hline(
+        y=avg_consumption,
+        line_dash="dash",
+        line_color="#10b981",
+        annotation_text=f"Average: {avg_consumption:.1f}L",
+        annotation_position="right"
+    )
+    
+    fig.update_layout(
+        title="Fuel Consumption Per Generator Run",
+        xaxis_title="Date & Time",
+        yaxis_title="Fuel Consumed (Litres)",
+        template="plotly_dark",
+        height=450,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#e2e8f0'),
+        hovermode="closest"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Consumption distribution
+    col_dist1, col_dist2 = st.columns(2)
+    
+    with col_dist1:
+        # Histogram
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(
+            x=valid_runs['consumption_per_run'],
+            nbinsx=15,
+            marker_color='#3b82f6',
+            hovertemplate="Fuel: %{x:.1f}L<br>Frequency: %{y}<extra></extra>"
+        ))
+        
+        fig.update_layout(
+            title="Fuel Consumption Distribution",
+            xaxis_title="Fuel per Run (Litres)",
+            yaxis_title="Number of Runs",
+            template="plotly_dark",
+            height=350,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e2e8f0')
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col_dist2:
+        # Box plot
+        fig = go.Figure()
+        fig.add_trace(go.Box(
+            y=valid_runs['consumption_per_run'],
+            name='Consumption',
+            marker_color='#8b5cf6',
+            boxmean='sd'
+        ))
+        
+        fig.update_layout(
+            title="Consumption Variability",
+            yaxis_title="Fuel per Run (Litres)",
+            template="plotly_dark",
+            height=350,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e2e8f0'),
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Insights and analysis
+    with st.expander("📊 Consumption Insights & Optimization", expanded=False):
+        st.markdown("### Fuel Consumption Analysis")
+        
+        # Calculate statistics
+        std_dev = valid_runs['consumption_per_run'].std()
+        cv = (std_dev / avg_consumption) * 100 if avg_consumption > 0 else 0
+        
+        # Identify outliers
+        q1 = valid_runs['consumption_per_run'].quantile(0.25)
+        q3 = valid_runs['consumption_per_run'].quantile(0.75)
+        iqr = q3 - q1
+        outliers = valid_runs[
+            (valid_runs['consumption_per_run'] < q1 - 1.5*iqr) |
+            (valid_runs['consumption_per_run'] > q3 + 1.5*iqr)
+        ]
+        
+        insight_col1, insight_col2 = st.columns(2)
+        
+        with insight_col1:
+            st.markdown(f"""
+            **Consumption Pattern:**
+            - Average: **{avg_consumption:.1f}L** per run
+            - Standard Deviation: **{std_dev:.1f}L**
+            - Coefficient of Variation: **{cv:.1f}%**
+            - Outlier Runs: **{len(outliers)}** ({len(outliers)/len(valid_runs)*100:.1f}%)
+            """)
+            
+            if cv < 20:
+                st.success("✅ **Consistent consumption** - generator operating predictably")
+            elif cv < 40:
+                st.info("💡 **Moderate variation** - normal for varying load conditions")
+            else:
+                st.warning("⚠️ **High variation** - investigate load patterns or fuel system")
+        
+        with insight_col2:
+            st.markdown(f"""
+            **Cost Implications:**
+            - Cost per run @ R19/L: **R{avg_consumption * 19:.0f}**
+            - Daily cost (if 3 runs): **R{avg_consumption * 19 * 3:.0f}**
+            - Monthly projection: **R{avg_consumption * 19 * 3 * 30:.0f}**
+            
+            **Optimization Potential:**
+            """)
+            
+            if max_consumption > avg_consumption * 2:
+                potential_savings = (max_consumption - avg_consumption) * 19
+                st.info(f"""
+                💡 **High consumption runs detected**
+                - Peak run: {max_consumption:.1f}L (vs {avg_consumption:.1f}L avg)
+                - Potential waste: R{potential_savings:.0f} per high-consumption run
+                - Investigate: Load during peak times, maintenance needs
+                """)
+        
+        # Refueling predictions
+        st.markdown("### ⛽ Refueling Predictions")
+        
+        # Assume tank capacity
+        tank_capacity = 200  # Litres (adjust based on actual tank)
+        current_level = valid_runs['state_stop'].iloc[-1] if len(valid_runs) > 0 else 0
+        runs_remaining = int(current_level / avg_consumption)
+        
+        predict_col1, predict_col2, predict_col3 = st.columns(3)
+        
+        with predict_col1:
+            st.metric(
+                "Current Tank Level",
+                f"{current_level:.0f}L",
+                help="Last recorded tank level"
+            )
+            fill_percentage = (current_level / tank_capacity) * 100
+            if fill_percentage < 20:
+                st.error("🔴 Low fuel - refill soon")
+            elif fill_percentage < 40:
+                st.warning("🟡 Plan refueling")
+            else:
+                st.success("✅ Adequate fuel")
+        
+        with predict_col2:
+            st.metric(
+                "Runs Remaining",
+                f"~{runs_remaining}",
+                help=f"Estimated runs at {avg_consumption:.1f}L/run"
+            )
+            st.caption(f"Based on avg consumption")
+        
+        with predict_col3:
+            liters_to_full = tank_capacity - current_level
+            cost_to_full = liters_to_full * 19
+            st.metric(
+                "Cost to Full Tank",
+                f"R{cost_to_full:.0f}",
+                help=f"{liters_to_full:.0f}L needed @ R19/L"
+            )
+            st.caption(f"{liters_to_full:.0f}L needed")
+    
+    # Download per-run data
+    st.download_button(
+        "⬇️ Download Per-Run Data",
+        valid_runs[['last_changed', 'state_start', 'state_stop', 'consumption_per_run']].to_csv(index=False).encode('utf-8'),
+        file_name=f"fuel_per_run_{start_date}_to_{end_date}.csv",
+        mime="text/csv",
+        key="dl_per_run_data"
+    )
+
+
+def add_business_context_badge(metric_name, metric_value):
+    """Add contextual business insight badges to metrics"""
+    
+    # Define performance benchmarks
+    benchmarks = {
+        'fuel_daily_liters': {
+            'excellent': (0, 80, "🟢 Excellent", "#10b981", "Below target - great performance!"),
+            'good': (80, 120, "🟡 Good", "#f59e0b", "Within target range"),
+            'fair': (120, 160, "🟠 Fair", "#f97316", "Above target - room for improvement"),
+            'poor': (160, 9999, "🔴 High", "#ef4444", "Well above target - investigate efficiency")
+        },
+        'solar_peak_kw': {
+            'excellent': (80, 9999, "🟢 Excellent", "#10b981", "Outstanding solar output!"),
+            'good': (60, 80, "🟡 Good", "#f59e0b", "Good solar performance"),
+            'fair': (40, 60, "🟠 Fair", "#f97316", "Below expected output"),
+            'poor': (0, 40, "🔴 Low", "#ef4444", "Significantly underperforming")
+        },
+        'generator_efficiency': {
+            'excellent': (35, 100, "🟢 Excellent", "#10b981", "Generator operating optimally"),
+            'good': (25, 35, "🟡 Good", "#f59e0b", "Normal operation"),
+            'fair': (20, 25, "🟠 Fair", "#f97316", "Consider maintenance"),
+            'poor': (0, 20, "🔴 Poor", "#ef4444", "Maintenance required immediately")
+        },
+        'fuel_cost_daily': {
+            'excellent': (0, 1500, "🟢 Low", "#10b981", "Excellent cost control"),
+            'good': (1500, 2500, "🟡 Moderate", "#f59e0b", "Typical daily cost"),
+            'fair': (2500, 3500, "🟠 High", "#f97316", "Above average cost"),
+            'poor': (3500, 99999, "🔴 Very High", "#ef4444", "Investigate high costs")
+        }
+    }
+    
+    if metric_name not in benchmarks:
+        return ""
+    
+    # Find matching benchmark
+    for grade, (min_val, max_val, badge, color, message) in benchmarks[metric_name].items():
+        if min_val <= metric_value < max_val:
+            return f"""
+            <div style="
+                background: rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15);
+                border-left: 4px solid {color};
+                border-radius: 8px;
+                padding: 12px 16px;
+                margin: 8px 0;
+            ">
+                <div style="font-weight: 700; color: {color}; margin-bottom: 4px;">{badge}</div>
+                <div style="color: #cbd5e1; font-size: 0.9rem;">{message}</div>
+            </div>
+            """
+    
+    return ""
+
+
+def render_solar_comparison_with_warnings(old_solar_df, new_solar_df, start_date, end_date):
+    """Solar comparison with prominent data quality warnings"""
+    
+    st.markdown("### 🔄 System Upgrade Impact Analysis")
+    st.caption("Comparing old vs new solar system performance")
+    
+    if new_solar_df.empty:
+        st.error("❌ New solar system data not available")
+        return
+    
+    # Calculate data availability
+    new_solar_df['last_changed'] = pd.to_datetime(new_solar_df['last_changed'])
+    new_days = (new_solar_df['last_changed'].max() - new_solar_df['last_changed'].min()).days
+    
+    # Data quality assessment
+    quality_score = min(100, (new_days / 365) * 100)
+    
+    # PROMINENT WARNING SECTION
+    if quality_score < 50:
+        st.error(f"""
+        ⚠️ **COMPARISON NOT YET RELIABLE**
+        
+        **Current Status:**
+        - New system data: **{new_days} days** (need 365+ days for annual comparison)
+        - Data quality: **{quality_score:.0f}%**
+        - Status: **Preliminary metrics only**
+        
+        **Why this matters:**
+        - ☀️ Solar production varies **40-60%** between summer and winter in South Africa
+        - 📅 Short-term data doesn't capture seasonal patterns
+        - 🌤️ Weather variations can skew results significantly
+        - ❄️ Winter (June-Aug) produces 50% less than summer (Dec-Feb)
+        
+        **When will comparison be reliable?**
+        ✅ **Reliable comparison available:** {(datetime.now() + timedelta(days=365-new_days)).strftime('%B %d, %Y')}
+        
+        📊 **Current metrics shown below are preliminary and should not be used for:**
+        - Financial ROI calculations
+        - Investment decisions
+        - Performance comparisons with old system
+        """)
+        
+        render_data_quality_indicator(quality_score)
+        
+    elif quality_score < 80:
+        st.warning(f"""
+        🟡 **COMPARISON PARTIALLY RELIABLE**
+        
+        **Current Status:**
+        - New system data: **{new_days} days** (recommend 365+ days)
+        - Data quality: **{quality_score:.0f}%**
+        - Status: **Improving but limited**
+        
+        **Limitations:**
+        - Seasonal coverage incomplete
+        - Some weather patterns not yet captured
+        - Month-to-month comparisons more reliable than annual
+        
+        **For full reliability:** Need {365 - new_days} more days of data
+        """)
+        
+        render_data_quality_indicator(quality_score)
+        
+    else:
+        st.success(f"""
+        ✅ **COMPARISON RELIABLE**
+        
+        **Current Status:**
+        - New system data: **{new_days} days** - sufficient for annual analysis
+        - Data quality: **{quality_score:.0f}%**
+        - Status: **Full seasonal coverage achieved**
+        
+        ✅ Metrics below are reliable for decision-making
+        """)
+        
+        render_data_quality_indicator(quality_score)
+    
+    st.markdown("---")
+    
+    # Continue with preliminary metrics BUT with clear disclaimers
+    st.markdown("#### Preliminary Performance Metrics")
+    st.caption("⚠️ Note: Different time periods may affect comparison accuracy")
+    
+    # Process new system data
+    new_solar_df['state'] = pd.to_numeric(new_solar_df['state'], errors='coerce')
+    new_solar_df = new_solar_df[new_solar_df['state'] >= 0]
+    
+    if not new_solar_df.empty:
+        new_peak = new_solar_df['state'].max()
+        new_avg = new_solar_df['state'].mean()
+        new_total = new_solar_df['state'].sum()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric(
+                "New System Peak Power",
+                f"{new_peak:.1f} kW",
+                help="Maximum recorded power output"
+            )
+            st.caption(f"3-Inverter System")
+        
+        with col2:
+            st.metric(
+                "Average Power",
+                f"{new_avg:.1f} kW",
+                help="Average power generation"
+            )
+        
+        with col3:
+            st.metric(
+                "Days of Data",
+                f"{new_days}",
+                help="Total days recorded"
+            )
+            if new_days < 365:
+                st.warning(f"⚠️ Need {365-new_days} more days")
+    
+    # Comparison disclaimer
+    with st.expander("📖 Understanding the Comparison Limitations", expanded=True if quality_score < 50 else False):
+        st.markdown("""
+        ### Why Season Matters for Solar Comparison
+        
+        **South African Solar Patterns:**
+        - **Summer (Dec-Feb):** Longest days, highest output (100% baseline)
+        - **Autumn (Mar-May):** Moderate days, good output (70-80%)
+        - **Winter (Jun-Aug):** Shortest days, lowest output (50-60%)
+        - **Spring (Sep-Nov):** Improving days, rising output (75-85%)
+        
+        **Example of Seasonal Impact:**
+        - December solar: 200 kWh/day (summer peak)
+        - June solar: 100 kWh/day (winter low)
+        - **Same system, 50% difference!**
+        
+        ### Valid Comparison Methods
+        
+        ✅ **Same-season comparison:** Nov 2024 vs Nov 2025
+        ✅ **Full year comparison:** Jan-Dec 2024 vs Jan-Dec 2025
+        ✅ **Weather-normalized:** Adjust for cloud cover, rain
+        
+        ❌ **Invalid comparisons:**
+        ❌ Summer data vs winter data
+        ❌ Less than 6 months of data
+        ❌ Different weather conditions
+        
+        ### What You CAN Track Now
+        
+        Even with limited data, you can still monitor:
+        - ✅ Daily generation trends
+        - ✅ System health (all inverters working?)
+        - ✅ Peak power capacity
+        - ✅ Month-over-month improvements
+        - ✅ Equipment failures or issues
+        
+        ### What to Wait For
+        
+        Wait for 12 months of data before:
+        - ⏳ Calculating annual ROI
+        - ⏳ Comparing with old system
+        - ⏳ Making investment decisions
+        - ⏳ Reporting to stakeholders
+        """)
+
+
+def render_data_quality_dashboard():
+    """Comprehensive data quality monitoring dashboard"""
+    
+    st.markdown("## 📊 Data Quality Dashboard")
+    st.caption("Understand your data coverage, reliability, and gaps")
+    
+    # Load all data
+    all_data = load_all_energy_data_silent()
+    
+    st.markdown("### 📁 Data Source Overview")
+    
+    # Analyze each data source
+    data_sources = {
+        'Generator (Primary)': all_data.get('generator', pd.DataFrame()),
+        'Fuel History (Dense)': all_data.get('fuel_history', pd.DataFrame()),
+        'Fuel Purchases': all_data.get('fuel_purchases', pd.DataFrame()),
+        'New Solar System': all_data.get('solar', pd.DataFrame()),
+        'Factory Electricity': all_data.get('factory', pd.DataFrame())
+    }
+    
+    quality_data = []
+    
+    for source_name, df in data_sources.items():
+        if df.empty:
+            quality_data.append({
+                'Data Source': source_name,
+                'Status': '❌ Missing',
+                'Records': 0,
+                'Date Range': 'N/A',
+                'Days': 0,
+                'Readings/Day': 0,
+                'Quality Score': 0,
+                'Grade': 'No Data'
+            })
+            continue
+        
+        # Ensure datetime column
+        date_col = 'last_changed' if 'last_changed' in df.columns else df.columns[0]
+        
+        try:
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            df_clean = df.dropna(subset=[date_col])
+            
+            if df_clean.empty:
+                quality_data.append({
+                    'Data Source': source_name,
+                    'Status': '⚠️ Invalid Dates',
+                    'Records': len(df),
+                    'Date Range': 'Invalid',
+                    'Days': 0,
+                    'Readings/Day': 0,
+                    'Quality Score': 10,
+                    'Grade': 'Poor'
+                })
+                continue
+            
+            # Calculate metrics
+            date_range_days = (df_clean[date_col].max() - df_clean[date_col].min()).days + 1
+            records_per_day = len(df_clean) / max(date_range_days, 1)
+            
+            # Calculate quality score
+            if records_per_day > 100:
+                quality_score = 95
+                grade = "Excellent"
+                status = "✅ Active"
+            elif records_per_day > 20:
+                quality_score = 80
+                grade = "Good"
+                status = "✅ Active"
+            elif records_per_day > 1:
+                quality_score = 60
+                grade = "Fair"
+                status = "🟡 Sparse"
+            else:
+                quality_score = 30
+                grade = "Poor"
+                status = "⚠️ Very Sparse"
+            
+            # Check for data gaps
+            time_diffs = df_clean.sort_values(date_col)[date_col].diff()
+            large_gaps = len(time_diffs[time_diffs > pd.Timedelta(hours=24)])
+            
+            quality_data.append({
+                'Data Source': source_name,
+                'Status': status,
+                'Records': f"{len(df_clean):,}",
+                'Date Range': f"{df_clean[date_col].min().date()} to {df_clean[date_col].max().date()}",
+                'Days': date_range_days,
+                'Readings/Day': f"{records_per_day:.1f}",
+                'Quality Score': quality_score,
+                'Grade': grade,
+                'Data Gaps (>24h)': large_gaps
+            })
+            
+        except Exception as e:
+            quality_data.append({
+                'Data Source': source_name,
+                'Status': f'❌ Error',
+                'Records': len(df),
+                'Date Range': 'Error',
+                'Days': 0,
+                'Readings/Day': 0,
+                'Quality Score': 0,
+                'Grade': 'Error'
+            })
+    
+    # Create quality table
+    quality_df = pd.DataFrame(quality_data)
+    
+    # Display with color coding
+    st.dataframe(
+        quality_df.style.background_gradient(
+            subset=['Quality Score'], 
+            cmap='RdYlGn', 
+            vmin=0, 
+            vmax=100
+        ),
+        use_container_width=True,
+        height=400
+    )
+    
+    # Overall system health
+    st.markdown("### 🏥 Overall System Health")
+    
+    avg_quality = quality_df['Quality Score'].mean()
+    active_sources = len(quality_df[quality_df['Status'].str.contains('✅', na=False)])
+    total_sources = len(quality_df)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        health_color = "#10b981" if avg_quality > 80 else "#f59e0b" if avg_quality > 60 else "#ef4444"
+        st.metric(
+            "System Health",
+            f"{avg_quality:.0f}%",
+            help="Average data quality across all sources"
+        )
+        st.markdown(f"<div style='color: {health_color}; font-weight: 600;'>{'Excellent' if avg_quality > 80 else 'Good' if avg_quality > 60 else 'Needs Attention'}</div>", unsafe_allow_html=True)
+    
+    with col2:
+        st.metric(
+            "Active Sources",
+            f"{active_sources}/{total_sources}",
+            help="Data sources with active data collection"
+        )
+    
+    with col3:
+        total_records = sum([int(str(r).replace(',', '')) for r in quality_df['Records'] if str(r).replace(',', '').isdigit()])
+        st.metric(
+            "Total Records",
+            f"{total_records:,}",
+            help="Total data points across all sources"
+        )
+    
+    with col4:
+        # Check data freshness
+        if not all_data.get('generator', pd.DataFrame()).empty:
+            gen_df = all_data['generator']
+            if 'last_changed' in gen_df.columns:
+                gen_df['last_changed'] = pd.to_datetime(gen_df['last_changed'], errors='coerce')
+                latest_data = gen_df['last_changed'].max()
+                hours_old = (datetime.now() - latest_data).total_seconds() / 3600
+                
+                if hours_old < 24:
+                    freshness = "Live"
+                    fresh_color = "#10b981"
+                elif hours_old < 72:
+                    freshness = f"{int(hours_old)}h old"
+                    fresh_color = "#f59e0b"
+                else:
+                    freshness = f"{int(hours_old/24)}d old"
+                    fresh_color = "#ef4444"
+                
+                st.metric(
+                    "Data Freshness",
+                    freshness,
+                    help="Time since last data point"
+                )
+                st.markdown(f"<div style='color: {fresh_color}; font-weight: 600;'>{'✅ Current' if hours_old < 24 else '🟡 Recent' if hours_old < 72 else '🔴 Stale'}</div>", unsafe_allow_html=True)
+    
+    # Recommendations
+    st.markdown("### 💡 Data Quality Recommendations")
+    
+    issues_found = False
+    
+    for _, row in quality_df.iterrows():
+        if row['Grade'] == 'Poor' or row['Grade'] == 'No Data':
+            issues_found = True
+            st.warning(f"""
+            **{row['Data Source']}**: {row['Grade']} quality
+            - Status: {row['Status']}
+            - Records: {row['Records']}
+            - **Action:** Check sensor connection, verify data logging system
+            """)
+        
+        if isinstance(row.get('Data Gaps (>24h)'), (int, float)) and row['Data Gaps (>24h)'] > 10:
+            issues_found = True
+            st.warning(f"""
+            **{row['Data Source']}**: {int(row['Data Gaps (>24h)'])} significant gaps detected
+            - **Action:** Review logging system, check for downtime events
+            - Gaps may affect accuracy of calculations
+            """)
+    
+    if not issues_found:
+        st.success("✅ All data sources operating normally - no action required")
+    
+    # Data coverage visualization
+    st.markdown("### 📅 Data Coverage Timeline")
+    
+    fig = go.Figure()
+    
+    for idx, row in quality_df.iterrows():
+        if row['Date Range'] != 'N/A' and row['Date Range'] != 'Invalid' and row['Date Range'] != 'Error':
+            try:
+                dates = row['Date Range'].split(' to ')
+                start = pd.to_datetime(dates[0])
+                end = pd.to_datetime(dates[1])
+                
+                fig.add_trace(go.Scatter(
+                    x=[start, end],
+                    y=[row['Data Source'], row['Data Source']],
+                    mode='lines+markers',
+                    name=row['Data Source'],
+                    line=dict(width=8),
+                    marker=dict(size=10),
+                    hovertemplate=f"<b>{row['Data Source']}</b><br>%{{x}}<extra></extra>"
+                ))
+            except:
+                pass
+    
+    fig.update_layout(
+        title="Data Availability Timeline",
+        xaxis_title="Date",
+        yaxis_title="Data Source",
+        template="plotly_dark",
+        height=400,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#e2e8f0'),
+        showlegend=False
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Export quality report
+    st.markdown("### 📥 Export Quality Report")
+    
+    col_export1, col_export2 = st.columns(2)
+    
+    with col_export1:
+        st.download_button(
+            "⬇️ Download Quality Report (CSV)",
+            quality_df.to_csv(index=False).encode('utf-8'),
+            file_name=f"data_quality_report_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            key="dl_quality_report"
+        )
+    
+    with col_export2:
+        # Create detailed report
+        report_text = f"""
+DATA QUALITY REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+SYSTEM HEALTH: {avg_quality:.0f}%
+ACTIVE SOURCES: {active_sources}/{total_sources}
+TOTAL RECORDS: {total_records:,}
+
+DETAILED ANALYSIS:
+{quality_df.to_string(index=False)}
+
+RECOMMENDATIONS:
+"""
+        
+        for _, row in quality_df.iterrows():
+            if row['Grade'] == 'Poor' or row['Grade'] == 'No Data':
+                report_text += f"\n- {row['Data Source']}: {row['Grade']} - Check sensor/logging"
+        
+        if not issues_found:
+            report_text += "\n- All systems operating normally"
+        
+        st.download_button(
+            "⬇️ Download Full Report (TXT)",
+            report_text.encode('utf-8'),
+            file_name=f"data_quality_full_report_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain",
+            key="dl_full_report"
+        )
+
+    
+    # NEW: Data Quality Dashboard Tab
+    with tab5:
+        render_data_quality_dashboard()
